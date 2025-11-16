@@ -131,8 +131,8 @@ export const DEFAULT_FILTERS = {
   query: '',
   categories: {
     general: true,
-    anime: true,
-    people: true,
+    anime: false,
+    people: false,
   },
   ratio: '',
   includeNsfw: false,
