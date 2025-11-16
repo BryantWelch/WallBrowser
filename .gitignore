@@ -27,3 +27,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Personal API documentation (may contain sensitive keys)
+API_KEY_GUIDE.md
+API_KEY_SETUP.md
+API_ANALYSIS.md
