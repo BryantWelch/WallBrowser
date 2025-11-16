@@ -119,7 +119,7 @@ export function useWallhavenAPI() {
             throw new Error('Rate limited. Please wait a moment and try again.');
           }
           if (response.status === 401) {
-            throw new Error('Invalid API key or unauthorized access. Check your API key in .env file');
+            throw new Error('Invalid API key or unauthorized access. Check your API key in Settings');
           }
           // Try to get error details
           const text = await response.text();

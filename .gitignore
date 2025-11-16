@@ -23,12 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment variables (contains API keys)
-.env
-.env.local
-.env.*.local
-
-# Personal API documentation (may contain sensitive keys)
-API_KEY_GUIDE.md
-API_KEY_SETUP.md
-API_ANALYSIS.md
+# Personal development notes
+CHANGELOG.md

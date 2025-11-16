@@ -19,6 +19,7 @@ export function ControlsPanel({
   onClearError,
   viewMode,
   onViewModeChange,
+  onOpenSettings,
 }) {
   const filteredResolutionPresets = useMemo(() => {
     if (!filters.ratio) return RESOLUTION_PRESETS;
@@ -375,15 +376,15 @@ export function ControlsPanel({
           </div>
         </div>
 
-        <label className="checkbox-label nsfw-checkbox">
-          <input
-            type="checkbox"
-            checked={filters.includeNsfw}
-            onChange={(e) => onFilterChange('includeNsfw', e.target.checked)}
-            aria-label="Include NSFW and Sketchy content"
-          />
-          <span>Include NSFW/Sketchy</span>
-        </label>
+        <button
+          type="button"
+          className="secondary-button settings-button"
+          onClick={onOpenSettings}
+          aria-label="Open API key and content settings"
+          title="API Key & Content Settings"
+        >
+          ⚙️ Settings
+        </button>
       </div>
 
       {error && (

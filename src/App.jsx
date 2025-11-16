@@ -4,6 +4,7 @@ import { ControlsPanel } from './components/ControlsPanel';
 import { WallpaperGrid } from './components/WallpaperGrid';
 import { PaginationBar } from './components/PaginationBar';
 import { PreviewModal } from './components/PreviewModal';
+import { SettingsModal } from './components/SettingsModal';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useWallhavenAPI } from './hooks/useWallhavenAPI';
 import { usePagination } from './hooks/usePagination';
@@ -18,10 +19,12 @@ function App() {
       console.info(
         '%c💡 Wallhaven API Key Not Configured',
         'color: #3b82f6; font-size: 14px; font-weight: bold;',
-        '\n\nTo see uploader names (currently showing as "Anonymous"):\n' +
-        '1. Get a free API key: https://wallhaven.cc/settings/account\n' +
-        '2. Add it to src/constants.js in the API_CONFIG.API_KEY field\n\n' +
-        'This also unlocks higher rate limits and full NSFW filtering.'
+        '\n\nYou\'re using the public API.\n\n' +
+        'To unlock NSFW/Sketchy content and higher rate limits:\n' +
+        '1. Click the ⚙️ Settings button in the controls panel\n' +
+        '2. Get a free API key: https://wallhaven.cc/settings/account\n' +
+        '3. Enter it in the settings modal\n\n' +
+        'Your key is stored locally and never sent to any server except Wallhaven.'
       );
     }
   }, []);
@@ -49,6 +52,9 @@ function App() {
   // Show only selected wallpapers toggle
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [pageBeforeShowingSelected, setPageBeforeShowingSelected] = useState(1);
+  
+  // Settings modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   // Track initial mount to avoid double-fetching
   const isInitialMount = useRef(true);
@@ -399,6 +405,7 @@ function App() {
           onClearError={clearError}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         <PaginationBar
@@ -533,6 +540,13 @@ function App() {
           onColorClick={handleColorClick}
         />
       )}
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+      />
     </div>
   );
 }

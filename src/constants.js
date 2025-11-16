@@ -149,13 +149,24 @@ export const STORAGE_KEYS = {
   VIEW_MODE: 'wallhaven-view-mode',
 };
 
+// Helper to get API key from localStorage
+function getApiKey() {
+  try {
+    return localStorage.getItem('wallhaven_api_key') || '';
+  } catch (error) {
+    console.error('Failed to get stored API key:', error);
+    return '';
+  }
+}
+
 export const API_CONFIG = {
   BASE_URL: '/api/wallhaven/api/v1',
   USER_AGENT: 'wallhaven-browser/0.0.1',
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000,
-  // API key loaded from .env file (VITE_WALLHAVEN_API_KEY)
+  // API key stored in localStorage (via Settings modal)
   // Get your API key from: https://wallhaven.cc/settings/account
-  // Copy .env.example to .env and add your key there
-  API_KEY: import.meta.env.VITE_WALLHAVEN_API_KEY || '',
+  get API_KEY() {
+    return getApiKey();
+  },
 };

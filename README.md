@@ -1,50 +1,20 @@
 # Wallhaven Browser
 
-A modern, feature-rich web application for browsing and downloading wallpapers from Wallhaven. Search, filter, preview, and bulk-download wallpapers with an intuitive interface.
+A modern web application for browsing and downloading wallpapers from Wallhaven. Built with React, featuring advanced search, bulk downloads, and a beautiful interface.
 
-## Features
+## ✨ Key Features
 
-### 🎨 Core Features
-- **Advanced Search & Filters**: Search by keywords, resolution, aspect ratio, color, and sort options
-- **Smart Resolution Filtering**: Filter by common resolutions (1080p to 8K) with exact match option
-- **Aspect Ratio Presets**: Quick filters for 16:9, 21:9, 32:9, and 3:2 displays
-- **Category Selection**: Filter by General, Anime, and People categories
-- **NSFW Toggle**: Optional NSFW content filtering
-
-### 🖼️ Viewing & Preview
-- **Quick Preview Modal**: Click any wallpaper to view full resolution with metadata
-- **Keyboard Navigation**: Arrow keys to navigate between wallpapers in preview
-- **View Modes**: Toggle between Compact, Comfortable, and Cozy grid layouts
-- **Loading Skeletons**: Smooth shimmer loading states for better UX
-
-### 💾 Downloads & Selection
-- **Bulk Download with ZIP**: Select multiple wallpapers and download as a single ZIP file
-- **Individual Downloads**: Direct download for single wallpapers
-- **Persistent Selection**: Selection state maintained while browsing
-- **Favorites System**: Save wallpapers to favorites with local storage persistence
-
-### ⌨️ Keyboard Shortcuts
-- **Enter**: Fetch wallpapers / Search
-- **Escape**: Close preview modal / Clear selection
-- **Arrow Left/Right**: Navigate wallpapers in preview or change pages
-- **Ctrl/Cmd + A**: Select all visible wallpapers
-
-### 🔄 Performance & Reliability
-- **Request Caching**: 5-minute cache for API responses to reduce load
-- **Auto-Retry**: Failed requests automatically retry with exponential backoff
-- **Filter Persistence**: All filters saved to localStorage
-- **Progressive Image Loading**: Images load with fade-in animation
-
-### ♿ Accessibility
-- **ARIA Labels**: Comprehensive screen reader support
-- **Keyboard Navigation**: Full keyboard accessibility
-- **Focus Indicators**: Clear focus states for all interactive elements
-- **Semantic HTML**: Proper use of semantic elements
-
-### 📱 Responsive Design
-- **Mobile Optimized**: Responsive layouts for all screen sizes
-- **Touch Friendly**: Larger hit targets on mobile devices
-- **Adaptive Grid**: Grid automatically adjusts to screen width
+- **Zero Setup** - Works immediately with public API, no configuration required
+- **Advanced Filtering** - Search by keywords, resolution (720p-8K), aspect ratio (13 options), color, categories
+- **Cross-Page Selection** - Select wallpapers across multiple pages, view only selected, download all as ZIP
+- **Random Discovery** - Dedicated 🎲 button with animated dice for instant random wallpapers
+- **Quick Preview** - Full-screen modal with keyboard navigation (arrow keys)
+- **Favorites System** - Save wallpapers locally for quick access
+- **API Key Support** - Optional: Add your API key via ⚙️ Settings for NSFW/Sketchy content
+- **View Modes** - Switch between Compact, Comfortable, and Cozy grid layouts
+- **Keyboard Shortcuts** - Enter to search, Escape to close, Ctrl+A to select all, arrow keys to navigate
+- **Smart Caching** - 5-minute API cache with auto-retry on failures
+- **Responsive Design** - Works beautifully on desktop, tablet, and mobile
 
 ## Tech Stack
 
@@ -53,145 +23,54 @@ A modern, feature-rich web application for browsing and downloading wallpapers f
 - **JSZip** - ZIP file creation for bulk downloads
 - **Wallhaven API** - Wallpaper source
 
-## Project Structure
+## 🚀 Quick Start
 
-```
-src/
-├── components/           # React components
-│   ├── ControlsPanel.jsx    # Search and filter controls
-│   ├── WallpaperCard.jsx    # Individual wallpaper card
-│   ├── WallpaperGrid.jsx    # Grid container
-│   ├── PaginationBar.jsx    # Pagination controls
-│   └── PreviewModal.jsx     # Full-size preview modal
-├── hooks/               # Custom React hooks
-│   ├── useLocalStorage.js   # localStorage wrapper
-│   ├── useWallhavenAPI.js   # API calls with caching
-│   ├── usePagination.js     # Pagination logic
-│   ├── useFavorites.js      # Favorites management
-│   └── useKeyboardShortcuts.js  # Keyboard shortcuts
-├── constants.js         # App constants and config
-├── utils.js            # Utility functions
-├── App.jsx             # Main app component
-├── main.jsx            # Entry point
-└── styles.css          # Global styles
-```
-
-## Getting Started
-
-### Prerequisites
-- Node.js 16+ installed
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd Widescreen-Wallpapers
-```
 
-2. Install dependencies:
-```bash
+# Install dependencies
 npm install
-```
 
-3. **Set up your API key (Optional but Recommended)**:
-```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env and add your Wallhaven API key
-# Get your key from: https://wallhaven.cc/settings/account
-```
-
-4. Start the development server:
-```bash
+# Start development server
 npm run dev
+
+# Open http://localhost:5173
 ```
 
-5. Open your browser to `http://localhost:5173`
+**That's it!** No API key setup required - the app works immediately.
 
 ### Build for Production
 
 ```bash
 npm run build
+# Output: dist/
 ```
 
-The built files will be in the `dist/` directory.
+## ⚙️ API Key Setup (Optional)
 
-## Configuration
+Adding your own API key unlocks NSFW/Sketchy content and higher rate limits:
 
-### Wallhaven API Key (Optional but Recommended)
+1. Click the **⚙️ Settings** button in the app
+2. Get a free API key from [Wallhaven Settings](https://wallhaven.cc/settings/account) (requires account)
+3. Paste it into the modal and click **Save Key**
 
-To access NSFW content and unlock higher rate limits, you'll need a Wallhaven API key:
+Your API key is stored locally in your browser (localStorage) and never sent anywhere except Wallhaven.
 
-1. **Get your API key**: Go to [Wallhaven Settings](https://wallhaven.cc/settings/account) (requires free account)
-2. **Add it to `.env` file**:
-   ```bash
-   VITE_WALLHAVEN_API_KEY=your_actual_api_key_here
-   ```
+## 💡 Usage Tips
 
-**Without an API key:**
-- SFW content only (~200k wallpapers)
-- Standard rate limits
-
-**With an API key:**
-- Full NSFW/Sketchy content access (~900k+ wallpapers)
-- Higher rate limits (45 requests/minute vs 24/minute)
-- Support for additional API features
-
-**Security Note:** 
-- ✅ `.env` files are git-ignored by default
-- ✅ Your API key will NOT be committed to version control
-- ✅ Share `.env.example` instead of `.env` with others
-- ❌ Never hardcode API keys in source files
-
-### API Configuration
-All API settings can be modified in `src/constants.js`.
-
-### Default Filters
-Modify default filter values in `src/constants.js`:
-
-```javascript
-export const DEFAULT_FILTERS = {
-  sort: '',
-  timeRange: '1M',
-  categories: {
-    general: true,
-    anime: true,
-    people: true,
-  },
-  // ... more defaults
-};
-```
-
-## Usage Tips
-
-1. **Enter to Search**: Press Enter in the search field to fetch results
-2. **Quick Preview**: Click any wallpaper to view full resolution
-3. **Bulk Download**: Select multiple wallpapers and click "Download selected" to get a ZIP
-4. **Save Favorites**: Click the heart icon to save wallpapers for later
-5. **Persistent Filters**: Your filter preferences are automatically saved
-
-## Browser Support
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-
-## Performance
-
-- Request caching reduces API calls
-- Progressive image loading minimizes initial load time
-- Lazy loading for images below the fold
-- Optimized re-renders with React hooks
+- **Random Search** - Click the 🎲 dice button for instant random wallpapers
+- **Cross-Page Selection** - Select wallpapers on multiple pages, click "Show selected →" to review all at once
+- **Bulk Download** - Select wallpapers → "Download selected" → Get a ZIP with all images
+- **Keyboard Navigation** - Use arrow keys in preview modal, Ctrl+A to select all visible
+- **Favorites** - Save wallpapers with ♥ for quick access later (stored locally)
+- **Search Similar** - Click "🔍 Similar" on any wallpaper to find visually similar ones
 
 ## License
 
 MIT
 
-## Credits
+## 🙏 Credits
 
-- Wallpapers provided by [Wallhaven](https://wallhaven.cc)
-- Icons: Unicode characters
-- Built with ❤️ using React and Vite
+Wallpapers provided by [Wallhaven](https://wallhaven.cc) • Built with React + Vite
