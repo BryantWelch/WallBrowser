@@ -1,6 +1,6 @@
-# Wallhaven Browser
+# WallBrowser
 
-A modern web application for browsing and downloading wallpapers from Wallhaven. Built with React, featuring advanced search, bulk downloads, and a beautiful interface.
+A modern wallpaper browser for Wallhaven. Built with React, featuring advanced search, bulk downloads, and a beautiful interface.
 
 ## ✨ Key Features
 
@@ -28,7 +28,7 @@ A modern web application for browsing and downloading wallpapers from Wallhaven.
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd Widescreen-Wallpapers
+cd WallBrowser
 
 # Install dependencies
 npm install

@@ -161,7 +161,7 @@ function getApiKey() {
 
 export const API_CONFIG = {
   BASE_URL: '/api/wallhaven/api/v1',
-  USER_AGENT: 'wallhaven-browser/0.0.1',
+  USER_AGENT: 'wallbrowser/0.0.1',
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000,
   // API key stored in localStorage (via Settings modal)

@@ -374,8 +374,8 @@ function App() {
       <header className="app-header">
         <div className="app-header-content">
           <div className="app-header-left">
-            <h1>Wallhaven Browser</h1>
-            <p className="app-subtitle">Browse and bulk-download wallpapers from Wallhaven</p>
+            <h1>WallBrowser</h1>
+            <p className="app-subtitle">A modern wallpaper browser for Wallhaven</p>
           </div>
           <div className="app-header-right">
             {favorites.length > 0 && (
