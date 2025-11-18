@@ -146,25 +146,48 @@ function App() {
     // Clear selections when user manually fetches (new search)
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    // Reset to page 1 and fetch with current filters
-    resetPage();
-    await fetchWallpapers(filters, 1);
+    
+    // If already on page 1, just fetch. If not, reset to page 1 (which triggers auto-fetch via useEffect)
+    if (page === 1) {
+      await fetchWallpapers(filters, 1);
+    } else {
+      resetPage(); // This will trigger the page change useEffect which handles the fetch
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, page, resetPage]);
   
-  // Memoize fetchWallpapers call to prevent re-renders
-  const fetchWithFilters = useCallback(() => {
-    // Ensure filters are initialized before fetching
-    if (!filters || !filters.categories) {
+  // Keep latest filters in a ref so page navigation always uses current filters
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  
+  // Initial load - fetch with default filters
+  const hasInitialFetchRef = useRef(false);
+  useEffect(() => {
+    if (!hasInitialFetchRef.current) {
+      hasInitialFetchRef.current = true;
+      fetchWallpapers(filters, 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
+  // Auto-fetch ONLY on page changes (not filter changes)
+  // Note: Only 'page' in dependency array - filters handled via ref
+  // fetchWallpapers is NOT in deps to prevent loops when seed changes
+  const prevPageRef = useRef(page);
+  useEffect(() => {
+    // Skip if this is just the initial page value
+    if (prevPageRef.current === page) {
       return;
     }
-    fetchWallpapers(filters, page);
-  }, [filters, page, fetchWallpapers]);
-  
-  // Auto-fetch on page change (including initial load)
-  useEffect(() => {
-    fetchWithFilters();
-  }, [fetchWithFilters]);
+    prevPageRef.current = page;
+    
+    // Page changed - fetch with current filters
+    if (!filtersRef.current || !filtersRef.current.categories) {
+      return;
+    }
+    fetchWallpapers(filtersRef.current, page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
   
   // Preload current page full images and prefetch adjacent pages
   useEffect(() => {

@@ -59,8 +59,6 @@ export function ControlsPanel({
     return RESOLUTION_PRESETS.filter((preset) => preset.ratio === filters.ratio);
   }, [filters.ratio]);
 
-  const [isRolling, setIsRolling] = React.useState(false);
-  const [currentDice, setCurrentDice] = React.useState(6); // Start with dice showing 6
   const [showSearchHints, setShowSearchHints] = React.useState(false);
   const searchHintsRef = React.useRef(null);
   const searchButtonRef = React.useRef(null);
@@ -87,33 +85,6 @@ export function ControlsPanel({
     if (e.key === 'Enter') {
       onFetch();
     }
-  };
-
-  const handleRandomSearch = () => {
-    if (isLoading || isRolling) return;
-    
-    // Start rolling animation
-    setIsRolling(true);
-    
-    // Cycle through dice faces quickly
-    let cycles = 0;
-    const maxCycles = 8; // Number of times to change the dice
-    const interval = setInterval(() => {
-      setCurrentDice(Math.floor(Math.random() * 6) + 1); // 1-6
-      cycles++;
-      
-      if (cycles >= maxCycles) {
-        clearInterval(interval);
-        setIsRolling(false);
-        // Set final random dice face
-        setCurrentDice(Math.floor(Math.random() * 6) + 1);
-      }
-    }, 50); // Change every 50ms
-    
-    // Set sort to random and trigger fetch
-    onMultipleFilterChanges({ sort: 'random' });
-    // Trigger fetch immediately - force new results each time
-    setTimeout(() => onFetch(), 0);
   };
 
   return (
@@ -168,62 +139,6 @@ export function ControlsPanel({
               <small>Example: <code>+cyberpunk +neon -cars @Leonid428</code></small>
             </div>
           )}
-        </div>
-        <div className="control-item control-item-random">
-          <button
-            className="random-button"
-            type="button"
-            onClick={handleRandomSearch}
-            disabled={isLoading || isRolling}
-            title="Get random wallpapers"
-            aria-label="Get random wallpapers"
-          >
-            {currentDice === 1 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="12" cy="12" r="2.5"/>
-              </svg>
-            )}
-            {currentDice === 2 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="7" cy="7" r="2.5"/>
-                <circle cx="17" cy="17" r="2.5"/>
-              </svg>
-            )}
-            {currentDice === 3 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="7" cy="7" r="2.5"/>
-                <circle cx="12" cy="12" r="2.5"/>
-                <circle cx="17" cy="17" r="2.5"/>
-              </svg>
-            )}
-            {currentDice === 4 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="7" cy="7" r="2.5"/>
-                <circle cx="17" cy="7" r="2.5"/>
-                <circle cx="7" cy="17" r="2.5"/>
-                <circle cx="17" cy="17" r="2.5"/>
-              </svg>
-            )}
-            {currentDice === 5 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="7" cy="7" r="2.5"/>
-                <circle cx="17" cy="7" r="2.5"/>
-                <circle cx="12" cy="12" r="2.5"/>
-                <circle cx="7" cy="17" r="2.5"/>
-                <circle cx="17" cy="17" r="2.5"/>
-              </svg>
-            )}
-            {currentDice === 6 && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="dice-icon">
-                <circle cx="7" cy="6" r="2.5"/>
-                <circle cx="7" cy="12" r="2.5"/>
-                <circle cx="7" cy="18" r="2.5"/>
-                <circle cx="17" cy="6" r="2.5"/>
-                <circle cx="17" cy="12" r="2.5"/>
-                <circle cx="17" cy="18" r="2.5"/>
-              </svg>
-            )}
-          </button>
         </div>
         <div className="control-item control-item-button">
           <button

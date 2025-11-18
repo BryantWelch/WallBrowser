@@ -109,6 +109,7 @@ export const SORT_OPTIONS = [
   { value: '', label: 'Any' },
   { value: 'date_added', label: 'Date added' },
   { value: 'relevance', label: 'Relevance' },
+  { value: 'random', label: 'Random' },
   { value: 'views', label: 'Views' },
   { value: 'favorites', label: 'Favorites' },
   { value: 'toplist', label: 'Top' },

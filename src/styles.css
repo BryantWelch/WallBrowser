@@ -227,7 +227,7 @@ body {
 /* Search and action row */
 .controls-search-row {
   display: flex;
-  gap: 0;
+  gap: 0.75rem;
   align-items: flex-end;
   width: 100%;
 }
@@ -239,53 +239,9 @@ body {
   width: 100% !important;
 }
 
-.controls-search-row .control-item-random {
-  flex: 0 0 auto !important;
-  min-width: auto !important;
-  margin-left: 0.5rem;
-  margin-right: 0.35rem;
-}
-
 .controls-search-row .control-item-button {
   flex: 0 0 auto !important;
   min-width: auto !important;
-}
-
-/* Random button */
-.random-button {
-  height: 2.25rem;
-  width: 2.25rem;
-  padding: 0;
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(75, 85, 99, 0.5);
-  border-radius: 0.375rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-  color: var(--text-secondary);
-}
-
-.random-button:hover:not(:disabled) {
-  background: rgba(30, 41, 59, 0.8);
-  border-color: rgba(148, 163, 184, 0.8);
-  color: var(--text-primary);
-  transform: scale(1.05);
-}
-
-.random-button:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.random-button:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.dice-icon {
-  width: 1.4rem;
-  height: 1.4rem;
 }
 
 /* Filters row */
