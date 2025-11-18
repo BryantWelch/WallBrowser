@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { getStoredApiKey, setStoredApiKey, clearStoredApiKey, hasStoredApiKey } from '../utils/apiKeyStorage';
 
 export function SettingsModal({ isOpen, onClose, filters, onFilterChange }) {
+  // Prevent body scroll when modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
+
   const [apiKey, setApiKey] = useState('');
   const [hasCustomKey, setHasCustomKey] = useState(false);
   const [showKey, setShowKey] = useState(false);

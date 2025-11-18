@@ -3,6 +3,7 @@ import React from 'react';
 export function PaginationBar({ 
   currentPage, 
   totalPages, 
+  totalResults,
   onPageChange, 
   onNext, 
   onPrevious,
@@ -10,12 +11,23 @@ export function PaginationBar({
   canGoNext,
   canGoPrevious
 }) {
+  const CHUNK_SIZE = 100; // Progressive navigation chunk size
+
+  // Calculate the next chunk boundary
+  // If on a chunk boundary (100, 200, etc), show the next chunk
+  // Otherwise show the end of current chunk
+  const nextChunkEnd = Math.ceil(currentPage / CHUNK_SIZE) * CHUNK_SIZE;
+  const actualNextChunk = currentPage === nextChunkEnd ? nextChunkEnd + CHUNK_SIZE : nextChunkEnd;
+  const displayedNextChunk = Math.min(actualNextChunk, totalPages);
+  const showProgressiveLast = displayedNextChunk > currentPage && displayedNextChunk < totalPages;
+
   const renderPageNumberButtons = () => {
     if (!totalPages || totalPages <= 1) return null;
 
     const buttons = [];
     const maxToShow = 5;
 
+    // Show pages around current page
     let start = Math.max(1, currentPage - 2);
     let end = Math.min(totalPages, start + maxToShow - 1);
 
@@ -43,6 +55,7 @@ export function PaginationBar({
       );
     };
 
+    // Show first page if not visible
     if (start > 1) {
       pushPageButton(1);
       if (start > 2) {
@@ -58,15 +71,16 @@ export function PaginationBar({
       pushPageButton(p);
     }
 
-    if (end < totalPages) {
-      if (end < totalPages - 1) {
+    // Show progressive "last" page (next chunk boundary)
+    if (showProgressiveLast && end < displayedNextChunk) {
+      if (end < displayedNextChunk - 1) {
         buttons.push(
           <span key="end-ellipsis" className="page-ellipsis" aria-hidden="true">
             …
           </span>
         );
       }
-      pushPageButton(totalPages);
+      pushPageButton(displayedNextChunk);
     }
 
     return buttons;
@@ -79,6 +93,13 @@ export function PaginationBar({
 
   return (
     <div className="pagination-bar" role="navigation" aria-label="Pagination">
+      {/* Total results info */}
+      {totalResults && (
+        <div className="pagination-info" style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem', textAlign: 'center' }}>
+          {totalResults.toLocaleString()} wallpapers found • Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
+        </div>
+      )}
+      
       <div className="pagination-buttons">
         <button
           type="button"

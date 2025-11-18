@@ -1,0 +1,7 @@
+# API Proxies
+/api/wallhaven/*  https://wallhaven.cc/:splat  200
+/proxy/thumb/*    https://th.wallhaven.cc/:splat  200
+/proxy/image/*    https://w.wallhaven.cc/:splat  200
+
+# SPA Fallback
+/*  /index.html  200

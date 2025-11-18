@@ -1,0 +1,35 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[redirects]]
+  from = "/api/wallhaven/*"
+  to = "https://wallhaven.cc/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/proxy/thumb/*"
+  to = "https://th.wallhaven.cc/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/proxy/image/*"
+  to = "https://w.wallhaven.cc/:splat"
+  status = 200
+  force = true
+
+# SPA fallback - must be last
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

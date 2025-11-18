@@ -149,51 +149,6 @@ export function generateCacheKey(filters) {
 }
 
 /**
- * Get a descriptive color name from hex value
- */
-export function getColorName(hex) {
-  // Remove # if present
-  const cleanHex = hex.replace('#', '').toLowerCase();
-  
-  // Convert hex to RGB
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  
-  // Calculate brightness
-  const brightness = (r + g + b) / 3;
-  
-  // Determine dominant color
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const saturation = max === 0 ? 0 : (max - min) / max;
-  
-  // Low saturation = grayscale
-  if (saturation < 0.15) {
-    if (brightness < 40) return 'Black';
-    if (brightness < 90) return 'Dark Gray';
-    if (brightness < 160) return 'Gray';
-    if (brightness < 220) return 'Light Gray';
-    return 'White';
-  }
-  
-  // Determine hue
-  if (r === max) {
-    if (g > b) {
-      if (g - b < 50) return 'Orange';
-      return g > 180 ? 'Yellow' : 'Orange-Red';
-    }
-    return b > 100 ? 'Magenta' : 'Red';
-  } else if (g === max) {
-    if (r > b) return r > 150 ? 'Yellow-Green' : 'Green';
-    return b > 150 ? 'Cyan' : 'Green';
-  } else {
-    if (r > g) return r > 150 ? 'Magenta' : 'Blue-Purple';
-    return g > 100 ? 'Cyan-Blue' : 'Blue';
-  }
-}
-
-/**
  * Parse Wallhaven API response
  */
 export function parseWallhavenResponse(json) {
@@ -211,8 +166,12 @@ export function parseWallhavenResponse(json) {
       const width = item?.dimension_x ?? 0;
       const height = item?.dimension_y ?? 0;
       const fullUrl = item?.path;
-      const thumbUrl =
-        item?.thumbs?.large || item?.thumbs?.original || fullUrl;
+      const originalThumbUrl = item?.thumbs?.large || item?.thumbs?.original || fullUrl;
+      
+      // Route thumbnails through proxy to avoid CORS issues
+      const thumbUrl = originalThumbUrl.includes('th.wallhaven.cc')
+        ? originalThumbUrl.replace('https://th.wallhaven.cc', '/proxy/thumb')
+        : originalThumbUrl;
 
       return {
         id: item.id,

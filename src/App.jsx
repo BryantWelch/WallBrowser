@@ -5,36 +5,59 @@ import { WallpaperGrid } from './components/WallpaperGrid';
 import { PaginationBar } from './components/PaginationBar';
 import { PreviewModal } from './components/PreviewModal';
 import { SettingsModal } from './components/SettingsModal';
+import { AboutModal } from './components/AboutModal';
+import { PrivacyModal } from './components/PrivacyModal';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useWallhavenAPI } from './hooks/useWallhavenAPI';
 import { usePagination } from './hooks/usePagination';
 import { useFavorites } from './hooks/useFavorites';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES, API_CONFIG } from './constants';
+import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
+import { clearCache } from './utils';
+import { getStoredApiKey } from './utils/apiKeyStorage';
 
 function App() {
-  // Show helpful message about API key on first load
-  useEffect(() => {
-    if (!API_CONFIG.API_KEY) {
-      console.info(
-        '%c💡 Wallhaven API Key Not Configured',
-        'color: #3b82f6; font-size: 14px; font-weight: bold;',
-        '\n\nYou\'re using the public API.\n\n' +
-        'To unlock NSFW/Sketchy content and higher rate limits:\n' +
-        '1. Click the ⚙️ Settings button in the controls panel\n' +
-        '2. Get a free API key: https://wallhaven.cc/settings/account\n' +
-        '3. Enter it in the settings modal\n\n' +
-        'Your key is stored locally and never sent to any server except Wallhaven.'
-      );
-    }
-  }, []);
-
-  // Persist filters to localStorage
-  const [filters, setFilters] = useLocalStorage(STORAGE_KEYS.FILTERS, DEFAULT_FILTERS);
+  // Always start with default filters - no persistence
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useLocalStorage(STORAGE_KEYS.VIEW_MODE, VIEW_MODES.COMFORTABLE);
   
+  // Clear cache on mount and fetch total wallpapers count
+  useEffect(() => {
+    clearCache();
+    
+    // Fetch total wallpapers count from Wallhaven
+    const fetchTotalCount = async () => {
+      try {
+        // Get API key if available (needed for Sketchy/NSFW content)
+        const apiKey = getStoredApiKey();
+        
+        // Query ALL wallpapers: all categories (111) and all purity levels (111)
+        // categories: general=1, anime=1, people=1 (binary: 111)
+        // purity: SFW=1, Sketchy=1, NSFW=1 (binary: 111)
+        // Note: Sketchy/NSFW require API key
+        let url = '/api/wallhaven/api/v1/search?categories=111&purity=111&page=1';
+        if (apiKey) {
+          url += `&apikey=${apiKey}`;
+        }
+        
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.meta?.total) {
+            setTotalWallpapers(data.meta.total);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch total wallpapers:', error);
+        // Don't show count if API call fails
+      }
+    };
+    
+    fetchTotalCount();
+  }, []);
+  
   // API and data management
-  const { isLoading, error, wallpapers, totalPages: apiTotalPages, fetchWallpapers, clearError } = useWallhavenAPI();
+  const { isLoading, error, wallpapers, totalPages: apiTotalPages, totalResults, fetchWallpapers, fetchWallpaperDetails, prefetchPages, clearError } = useWallhavenAPI();
   
   // Pagination
   const { page, totalPages, setTotalPages, goToPage, goToNextPage, goToPreviousPage, resetPage, canGoNext, canGoPrevious } = usePagination();
@@ -53,11 +76,22 @@ function App() {
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [pageBeforeShowingSelected, setPageBeforeShowingSelected] = useState(1);
   
+  // Show only favorites toggle
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+  const [pageBeforeShowingFavorites, setPageBeforeShowingFavorites] = useState(1);
+  
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
-  // Track initial mount to avoid double-fetching
-  const isInitialMount = useRef(true);
+  // Footer modal states
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  
+  // Total wallpapers in Wallhaven database
+  const [totalWallpapers, setTotalWallpapers] = useState(null);
+  
+  // Track last clicked index for shift-click range selection
+  const lastClickedIndexRef = useRef(null);
   
   // Sync API total pages with pagination
   useEffect(() => {
@@ -66,84 +100,156 @@ function App() {
     }
   }, [apiTotalPages, setTotalPages]);
   
-  // Handle filter changes
+  // Handle filter changes (no auto-fetch, just update state)
   const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({
       ...prev,
       [key]: value
     }));
-    resetPage();
-  }, [setFilters, resetPage]);
+    // Reset to page 1, but don't fetch (user must click Fetch button)
+    if (page !== 1) {
+      resetPage();
+    }
+  }, [page, resetPage]);
 
-  // Handle multiple filter changes at once
+  // Handle multiple filter changes at once (no auto-fetch)
   const handleMultipleFilterChanges = useCallback((updates) => {
     setFilters(prev => ({
       ...prev,
       ...updates
     }));
-    resetPage();
-  }, [setFilters, resetPage]);
+    // Reset to page 1, but don't fetch (user must click Fetch button)
+    if (page !== 1) {
+      resetPage();
+    }
+  }, [page, resetPage]);
 
   // Handle search for similar wallpapers
   const handleSearchSimilar = useCallback(async (wallpaperId) => {
-    setFilters(prev => ({
-      ...prev,
+    const newFilters = {
+      ...filters,
       query: `like:${wallpaperId}`
-    }));
+    };
+    setFilters(newFilters);
     resetPage();
     // Clear selections when starting a new search
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await fetchWallpapers({ ...filters, query: `like:${wallpaperId}` }, 1);
-  }, [setFilters, resetPage, fetchWallpapers, filters]);
+    await fetchWallpapers(newFilters, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, setFilters, resetPage, fetchWallpapers]);
   
   // Fetch wallpapers (manual fetch via button)
   const handleFetch = useCallback(async () => {
+    // Clear cache to ensure fresh results
+    clearCache();
     // Clear selections when user manually fetches (new search)
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await fetchWallpapers(filters, page);
+    // Reset to page 1 and fetch with current filters
+    resetPage();
+    await fetchWallpapers(filters, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
+  
+  // Memoize fetchWallpapers call to prevent re-renders
+  const fetchWithFilters = useCallback(() => {
+    // Ensure filters are initialized before fetching
+    if (!filters || !filters.categories) {
+      return;
+    }
+    fetchWallpapers(filters, page);
   }, [filters, page, fetchWallpapers]);
   
-  // Fetch on page change
+  // Auto-fetch on page change (including initial load)
   useEffect(() => {
-    if (isInitialMount.current) {
-      // Skip fetch on initial mount (handleFetch is called manually)
-      isInitialMount.current = false;
-    } else {
-      // Fetch on all subsequent page changes (including back to page 1)
-      // Don't clear selections - preserve multi-page selections
-      fetchWallpapers(filters, page);
-    }
-  }, [page, filters, fetchWallpapers]); // Trigger on page change
+    fetchWithFilters();
+  }, [fetchWithFilters]);
   
-  // Toggle selection
-  const toggleSelect = useCallback((id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        // Also remove from wallpapers map
-        setSelectedWallpapers(prevMap => {
-          const nextMap = new Map(prevMap);
-          nextMap.delete(id);
-          return nextMap;
+  // Preload current page full images and prefetch adjacent pages
+  useEffect(() => {
+    if (wallpapers.length > 0 && totalPages && !isLoading) {
+      // Small delay to avoid blocking the main page render
+      const timer = setTimeout(() => {
+        // Preload full-size images for current page (thumbnails already loaded by grid)
+        wallpapers.forEach(wallpaper => {
+          const full = new Image();
+          if (wallpaper.url.includes('w.wallhaven.cc')) {
+            full.src = wallpaper.url.replace('https://w.wallhaven.cc', '/proxy/image');
+          } else {
+            full.src = wallpaper.url;
+          }
         });
-      } else {
-        next.add(id);
-        // Also add to wallpapers map
-        const wallpaper = wallpapers.find(w => w.id === id);
-        if (wallpaper) {
+        
+        // Prefetch adjacent pages (thumbnails + full images)
+        prefetchPages(filters, page, totalPages);
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [wallpapers, page, totalPages, filters, isLoading, prefetchPages]);
+  
+  // Filter wallpapers based on showOnlySelected or showOnlyFavorites (needed for range selection)
+  const displayedWallpapers = showOnlySelected 
+    ? Array.from(selectedWallpapers.values())
+    : showOnlyFavorites
+    ? favorites
+    : wallpapers;
+  
+  // Toggle selection (with shift-click range selection support)
+  const toggleSelect = useCallback((id, index, shiftKey = false) => {
+    // Handle shift-click range selection
+    if (shiftKey && lastClickedIndexRef.current !== null && index !== null) {
+      const start = Math.min(lastClickedIndexRef.current, index);
+      const end = Math.max(lastClickedIndexRef.current, index);
+      const idsToSelect = displayedWallpapers.slice(start, end + 1).map(w => w.id);
+      
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        idsToSelect.forEach(id => next.add(id));
+        return next;
+      });
+      
+      setSelectedWallpapers(prevMap => {
+        const nextMap = new Map(prevMap);
+        displayedWallpapers.slice(start, end + 1).forEach(wallpaper => {
+          nextMap.set(wallpaper.id, wallpaper);
+        });
+        return nextMap;
+      });
+    } else {
+      // Normal toggle
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+          // Also remove from wallpapers map
           setSelectedWallpapers(prevMap => {
             const nextMap = new Map(prevMap);
-            nextMap.set(id, wallpaper);
+            nextMap.delete(id);
             return nextMap;
           });
+        } else {
+          next.add(id);
+          // Also add to wallpapers map
+          const wallpaper = displayedWallpapers.find(w => w.id === id);
+          if (wallpaper) {
+            setSelectedWallpapers(prevMap => {
+              const nextMap = new Map(prevMap);
+              nextMap.set(id, wallpaper);
+              return nextMap;
+            });
+          }
         }
-      }
-      return next;
-    });
-  }, [wallpapers]);
+        return next;
+      });
+    }
+    
+    // Update last clicked index
+    if (index !== null) {
+      lastClickedIndexRef.current = index;
+    }
+  }, [displayedWallpapers]);
   
   // Select all visible (current page only)
   const selectAllVisible = useCallback(() => {
@@ -193,28 +299,63 @@ function App() {
     const selected = Array.from(selectedWallpapers.values());
     if (selected.length === 0) return;
     
-    if (selected.length === 1) {
-      // Single file - direct download
-      const wallpaper = selected[0];
-      const link = document.createElement('a');
-      link.href = wallpaper.url;
-      link.download = `wallpaper-${wallpaper.id}.jpg`;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return;
-    }
+    const downloadBtn = document.querySelector('[data-download-btn]');
+    const originalText = downloadBtn?.textContent;
     
-    // Multiple files - create ZIP
     try {
+      if (selected.length === 1) {
+        // Single file - download via proxy
+        const wallpaper = selected[0];
+        
+        // Show loading state
+        if (downloadBtn) {
+          downloadBtn.innerHTML = '⏳ Downloading...';
+          downloadBtn.disabled = true;
+        }
+        
+        // Use proxy for download
+        let proxyUrl = wallpaper.url;
+        if (proxyUrl.includes('w.wallhaven.cc')) {
+          proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
+        } else if (proxyUrl.includes('wallhaven.cc')) {
+          proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
+        }
+        
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const blob = await response.blob();
+        const ext = wallpaper.url.split('.').pop() || 'jpg';
+        const blobUrl = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `wallhaven-${wallpaper.id}.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+        
+        // Show success
+        if (downloadBtn) {
+          downloadBtn.innerHTML = '✓ Downloaded';
+          downloadBtn.classList.add('download-success');
+          setTimeout(() => {
+            downloadBtn.innerHTML = originalText;
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('download-success');
+          }, 2000);
+        }
+        return;
+      }
+      
+      // Multiple files - create ZIP
       const zip = new JSZip();
       const folder = zip.folder('wallpapers');
       
       // Show loading state
-      const downloadBtn = document.querySelector('[data-download-btn]');
       if (downloadBtn) {
-        downloadBtn.textContent = 'Creating ZIP...';
+        downloadBtn.innerHTML = '⏳ Creating ZIP...';
         downloadBtn.disabled = true;
       }
       
@@ -222,8 +363,6 @@ function App() {
       await Promise.all(selected.map(async (wallpaper, index) => {
         try {
           // Convert Wallhaven URL to use our proxy
-          // e.g., https://w.wallhaven.cc/full/abc/wallhaven-123.jpg
-          // becomes /proxy/image/full/abc/wallhaven-123.jpg
           let proxyUrl = wallpaper.url;
           if (proxyUrl.includes('w.wallhaven.cc')) {
             proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
@@ -259,13 +398,28 @@ function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
+      // Show success
       if (downloadBtn) {
-        downloadBtn.textContent = `Download selected (${selected.length})`;
-        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = '✓ Downloaded';
+        downloadBtn.classList.add('download-success');
+        setTimeout(() => {
+          downloadBtn.innerHTML = originalText;
+          downloadBtn.disabled = false;
+          downloadBtn.classList.remove('download-success');
+        }, 2000);
       }
     } catch (err) {
-      console.error('ZIP creation failed:', err);
-      alert('Failed to create ZIP file. Please try again.');
+      console.error('Download failed:', err);
+      // Show error
+      if (downloadBtn) {
+        downloadBtn.innerHTML = '✕ Failed';
+        downloadBtn.classList.add('download-error');
+        setTimeout(() => {
+          downloadBtn.innerHTML = originalText;
+          downloadBtn.disabled = false;
+          downloadBtn.classList.remove('download-error');
+        }, 2000);
+      }
     }
   }, [selectedWallpapers]);
   
@@ -301,6 +455,29 @@ function App() {
     setSelectedWallpapers(new Map());
     
     // Fetch with the new color filter
+    await fetchWallpapers(updatedFilters, 1);
+  }, [filters, setFilters, resetPage, fetchWallpapers]);
+
+  // Handle tag click in preview modal
+  const handleTagClick = useCallback(async (tagName) => {
+    // Update filters with the tag search
+    const updatedFilters = {
+      ...filters,
+      query: tagName
+    };
+    setFilters(updatedFilters);
+    
+    // Close preview modal
+    setPreviewWallpaper(null);
+    
+    // Reset to page 1
+    resetPage();
+    
+    // Clear selections when starting a new search
+    setSelectedIds(new Set());
+    setSelectedWallpapers(new Map());
+    
+    // Fetch with the new tag search
     await fetchWallpapers(updatedFilters, 1);
   }, [filters, setFilters, resetPage, fetchWallpapers]);
   
@@ -354,8 +531,9 @@ function App() {
   const toggleShowOnlySelected = useCallback(() => {
     setShowOnlySelected(prev => {
       if (!prev) {
-        // Entering show-selected mode: save current page
+        // Entering show-selected mode: save current page and exit favorites mode
         setPageBeforeShowingSelected(page);
+        setShowOnlyFavorites(false);
       } else {
         // Exiting show-selected mode: return to saved page
         goToPage(pageBeforeShowingSelected);
@@ -364,31 +542,52 @@ function App() {
     });
   }, [page, pageBeforeShowingSelected, goToPage]);
   
-  // Filter wallpapers based on showOnlySelected
-  const displayedWallpapers = showOnlySelected 
-    ? Array.from(selectedWallpapers.values())
-    : wallpapers;
+  // Toggle showing only favorites
+  const toggleShowOnlyFavorites = useCallback(() => {
+    setShowOnlyFavorites(prev => {
+      if (!prev) {
+        // Entering favorites mode: save current page and exit selected mode
+        setPageBeforeShowingFavorites(page);
+        setShowOnlySelected(false);
+      } else {
+        // Exiting favorites mode: return to saved page
+        goToPage(pageBeforeShowingFavorites);
+      }
+      return !prev;
+    });
+  }, [page, pageBeforeShowingFavorites, goToPage]);
   
   return (
     <div className="app-root">
       <header className="app-header">
         <div className="app-header-content">
           <div className="app-header-left">
-            <h1>WallBrowser</h1>
+            <div className="header-title-row">
+              <svg className="app-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style={{ stopColor: '#2563eb', stopOpacity: 1 }} />
+                    <stop offset="100%" style={{ stopColor: '#7c3aed', stopOpacity: 1 }} />
+                  </linearGradient>
+                </defs>
+                <rect width="100" height="100" rx="20" fill="url(#logo-grad)" />
+                <rect x="20" y="30" width="25" height="40" rx="3" fill="white" opacity="0.9" />
+                <rect x="50" y="20" width="30" height="50" rx="3" fill="white" opacity="1" />
+                <rect x="20" y="75" width="60" height="5" rx="2" fill="white" opacity="0.7" />
+              </svg>
+              <h1>WallBrowser</h1>
+            </div>
             <p className="app-subtitle">A modern wallpaper browser for Wallhaven</p>
           </div>
           <div className="app-header-right">
-            {favorites.length > 0 && (
-              <button
-                type="button"
-                className="secondary-button favorites-button"
-                onClick={() => {
-                  alert(`You have ${favorites.length} favorites!`);
-                }}
-                aria-label={`View ${favorites.length} favorites`}
+            {totalWallpapers && (
+              <div 
+                className="header-stats header-stats-total"
+                title="Total wallpapers in Wallhaven's database. Add API key in Settings for full access."
               >
-                ♥ Favorites ({favorites.length})
-              </button>
+                <span className="header-stat-number">{totalWallpapers.toLocaleString()}</span>
+                <span className="header-stat-label">Wallpapers</span>
+              </div>
             )}
           </div>
         </div>
@@ -411,22 +610,27 @@ function App() {
         <PaginationBar
           currentPage={page}
           totalPages={totalPages}
+          totalResults={totalResults}
           onPageChange={goToPage}
           onPrevious={goToPreviousPage}
           onNext={goToNextPage}
-          isLoading={isLoading || showOnlySelected}
-          canGoNext={canGoNext && !showOnlySelected}
-          canGoPrevious={canGoPrevious && !showOnlySelected}
+          isLoading={isLoading || showOnlySelected || showOnlyFavorites}
+          canGoNext={canGoNext && !showOnlySelected && !showOnlyFavorites}
+          canGoPrevious={canGoPrevious && !showOnlySelected && !showOnlyFavorites}
         />
 
         <section className="grid-section">
-          {wallpapers.length > 0 && (
+          {(wallpapers.length > 0 || showOnlyFavorites || showOnlySelected) && (
             <div className="results-bar">
               <div className="results-info">
                 <span className="results-count">
-                  {showOnlySelected ? `${displayedWallpapers.length} selected` : `${wallpapers.length} wallpapers`}
+                  {showOnlySelected 
+                    ? `${displayedWallpapers.length} selected` 
+                    : showOnlyFavorites
+                    ? `${displayedWallpapers.length} favorites`
+                    : `${wallpapers.length} wallpapers`}
                 </span>
-                {!showOnlySelected && (
+                {!showOnlySelected && !showOnlyFavorites && (
                   <>
                     <span className="results-separator">·</span>
                     <span className="results-selected">
@@ -434,7 +638,7 @@ function App() {
                     </span>
                   </>
                 )}
-                {selectedCount > 0 && (
+                {selectedCount > 0 && !showOnlyFavorites && (
                   <button
                     type="button"
                     className="show-selected-button"
@@ -445,9 +649,20 @@ function App() {
                     {showOnlySelected ? '← Back to all' : 'Show selected →'}
                   </button>
                 )}
+                {(favorites.length > 0 || showOnlyFavorites) && !showOnlySelected && (
+                  <button
+                    type="button"
+                    className="show-selected-button"
+                    onClick={toggleShowOnlyFavorites}
+                    title={showOnlyFavorites ? "Return to browsing" : `View your ${favorites.length} favorites`}
+                    aria-label={showOnlyFavorites ? "Return to browsing" : `View ${favorites.length} favorites`}
+                  >
+                    {showOnlyFavorites ? '← Back to all' : `♥ View favorites (${favorites.length}) →`}
+                  </button>
+                )}
               </div>
               <div className="results-actions">
-                {!showOnlySelected && (
+                {!showOnlySelected && !showOnlyFavorites && (
                   <button
                     type="button"
                     className="secondary-button select-button"
@@ -460,16 +675,18 @@ function App() {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  className="secondary-button deselect-button"
-                  onClick={deselectAllVisible}
-                  disabled={!displayedWallpapers.length}
-                  aria-label={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers on current page"}
-                  title={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers"}
-                >
-                  Deselect all visible
-                </button>
+                {!showOnlyFavorites && (
+                  <button
+                    type="button"
+                    className="secondary-button deselect-button"
+                    onClick={deselectAllVisible}
+                    disabled={!displayedWallpapers.length}
+                    aria-label={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers on current page"}
+                    title={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers"}
+                  >
+                    Deselect all visible
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -503,6 +720,7 @@ function App() {
             <PaginationBar
               currentPage={page}
               totalPages={totalPages}
+              totalResults={totalResults}
               onPageChange={goToPage}
               onNext={goToNextPage}
               onPrevious={goToPreviousPage}
@@ -516,14 +734,27 @@ function App() {
 
       <footer className="app-footer">
         <div className="app-footer-content">
-          <p>
-            Powered by <a href="https://wallhaven.cc" target="_blank" rel="noopener noreferrer">Wallhaven</a> API
-          </p>
-          <p className="footer-links">
-            <a href="https://wallhaven.cc/help/api" target="_blank" rel="noopener noreferrer">API Docs</a>
-            <span>·</span>
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
-          </p>
+          <div className="footer-left">
+            <p>
+              Powered by <a href="https://wallhaven.cc" target="_blank" rel="noopener noreferrer">Wallhaven</a> API
+            </p>
+          </div>
+          <div className="footer-center">
+            <p className="footer-copyright">
+              © {new Date().getFullYear()} WallBrowser by Bryant Welch
+            </p>
+          </div>
+          <div className="footer-right">
+            <p className="footer-links">
+              <a href="https://wallhaven.cc/help/api" target="_blank" rel="noopener noreferrer">API Docs</a>
+              <span>·</span>
+              <a href="https://github.com/BryantWelch/WallBrowser" target="_blank" rel="noopener noreferrer">GitHub</a>
+              <span>·</span>
+              <button type="button" className="footer-link-button" onClick={() => setIsAboutOpen(true)}>About</button>
+              <span>·</span>
+              <button type="button" className="footer-link-button" onClick={() => setIsPrivacyOpen(true)}>Privacy</button>
+            </p>
+          </div>
         </div>
       </footer>
       
@@ -538,6 +769,8 @@ function App() {
           isFavorite={isFavorite(previewWallpaper.id)}
           onToggleFavorite={toggleFavorite}
           onColorClick={handleColorClick}
+          onTagClick={handleTagClick}
+          fetchWallpaperDetails={fetchWallpaperDetails}
         />
       )}
 
@@ -546,6 +779,16 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         filters={filters}
         onFilterChange={handleFilterChange}
+      />
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+      />
+
+      <PrivacyModal
+        isOpen={isPrivacyOpen}
+        onClose={() => setIsPrivacyOpen(false)}
       />
     </div>
   );

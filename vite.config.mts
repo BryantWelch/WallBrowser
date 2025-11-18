@@ -11,6 +11,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/wallhaven/, ''),
       },
+      '/proxy/thumb': {
+        target: 'https://th.wallhaven.cc',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/proxy\/thumb/, ''),
+      },
       '/proxy/image': {
         target: 'https://w.wallhaven.cc',
         changeOrigin: true,

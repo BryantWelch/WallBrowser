@@ -26,10 +26,11 @@ export function WallpaperGrid({
 
   return (
     <div className={`wallpaper-grid wallpaper-grid-${viewMode}`}>
-      {wallpapers.map((wallpaper) => (
+      {wallpapers.map((wallpaper, index) => (
         <WallpaperCard
           key={wallpaper.id}
           wallpaper={wallpaper}
+          index={index}
           isSelected={selectedIds.has(wallpaper.id)}
           isFavorite={favorites.some((fav) => fav.id === wallpaper.id)}
           onToggleSelect={onToggleSelect}

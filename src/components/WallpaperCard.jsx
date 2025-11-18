@@ -1,8 +1,10 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatFileSize } from '../utils';
+import { getColorName } from '../constants';
 
 export const WallpaperCard = React.memo(function WallpaperCard({ 
-  wallpaper, 
+  wallpaper,
+  index,
   isSelected, 
   isFavorite,
   onToggleSelect, 
@@ -14,6 +16,10 @@ export const WallpaperCard = React.memo(function WallpaperCard({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [imageUrl, setImageUrl] = useState(wallpaper.thumbUrl);
+  
+  const MAX_RETRIES = 2;
 
   const label = useMemo(() => `${wallpaper.width}×${wallpaper.height}`, [wallpaper.width, wallpaper.height]);
   const formattedFileSize = useMemo(() => wallpaper.fileSize > 0 ? formatFileSize(wallpaper.fileSize) : null, [wallpaper.fileSize]);
@@ -23,8 +29,8 @@ export const WallpaperCard = React.memo(function WallpaperCard({
 
   const handleSelect = useCallback((e) => {
     e.stopPropagation();
-    onToggleSelect(wallpaper.id);
-  }, [onToggleSelect, wallpaper.id]);
+    onToggleSelect(wallpaper.id, index, e.shiftKey);
+  }, [onToggleSelect, wallpaper.id, index]);
 
   const handleFavorite = useCallback((e) => {
     e.stopPropagation();
@@ -39,6 +45,26 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     e.stopPropagation();
     onSearchSimilar?.(wallpaper.id);
   }, [onSearchSimilar, wallpaper.id]);
+
+  const handleImageError = useCallback(() => {
+    if (retryCount < MAX_RETRIES) {
+      // Retry with a small delay and cache-busting parameter
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        setImageUrl(`${wallpaper.thumbUrl}?retry=${retryCount + 1}`);
+      }, 500 * (retryCount + 1)); // Exponential backoff: 500ms, 1000ms
+    } else {
+      setImageError(true);
+    }
+  }, [retryCount, wallpaper.thumbUrl]);
+
+  // Reset state when wallpaper changes
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+    setRetryCount(0);
+    setImageUrl(wallpaper.thumbUrl);
+  }, [wallpaper.thumbUrl]);
 
   return (
     <article
@@ -84,12 +110,12 @@ export const WallpaperCard = React.memo(function WallpaperCard({
         ) : (
           <img
             className="wallpaper-thumbnail"
-            src={wallpaper.thumbUrl}
+            src={imageUrl}
             alt={wallpaper.title}
             loading="lazy"
             style={{ opacity: imageLoaded ? 1 : 0 }}
             onLoad={() => setImageLoaded(true)}
-            onError={() => setImageError(true)}
+            onError={handleImageError}
           />
         )}
       </button>
@@ -132,7 +158,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
                   key={index}
                   className="wallpaper-color-swatch"
                   style={{ backgroundColor: color }}
-                  title={`${color} - Click to search`}
+                  title={`${getColorName(color)} (${color}) - Click to search`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onColorClick?.(color);

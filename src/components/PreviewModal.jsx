@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { formatFileSize } from '../utils';
+import { getColorName } from '../constants';
 
 export function PreviewModal({ 
   wallpaper, 
@@ -10,11 +11,77 @@ export function PreviewModal({
   hasPrevious,
   isFavorite,
   onToggleFavorite,
-  onColorClick
+  onColorClick,
+  onTagClick,
+  fetchWallpaperDetails
 }) {
   const [imageLoaded, setImageLoaded] = React.useState(false);
   const [imageError, setImageError] = React.useState(false);
+  const [tags, setTags] = React.useState([]);
+  const [loadingTags, setLoadingTags] = React.useState(false);
+  const [imageUrl, setImageUrl] = React.useState('');
+  const [useProxy, setUseProxy] = React.useState(true);
+  const modalRef = React.useRef(null);
+  
+  // Set image URL when wallpaper changes
+  React.useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+    setUseProxy(true);
+    
+    // Use full-size image for preview (proxied for speed)
+    let url = wallpaper.url;
+    
+    // Proxy full-size images from w.wallhaven.cc
+    if (url.includes('w.wallhaven.cc')) {
+      url = url.replace('https://w.wallhaven.cc', '/proxy/image');
+    }
+    
+    setImageUrl(url);
+    
+    // Preload current image immediately
+    const img = new Image();
+    img.src = url;
+  }, [wallpaper.id, wallpaper.url]);
+  
+  // Fetch full wallpaper details to get tags
+  React.useEffect(() => {
+    const loadTags = async () => {
+      setLoadingTags(true);
+      setTags([]); // Clear previous tags
+      
+      // Retry up to 3 times with exponential backoff
+      let retries = 3;
+      let delay = 1000;
+      
+      for (let i = 0; i < retries; i++) {
+        const details = await fetchWallpaperDetails(wallpaper.id);
+        if (details && details.tags) {
+          setTags(details.tags);
+          setLoadingTags(false);
+          return;
+        }
+        
+        // Wait before retry (except on last attempt)
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+        }
+      }
+      
+      // All retries failed
+      setLoadingTags(false);
+    };
+    
+    loadTags();
+  }, [wallpaper.id, fetchWallpaperDetails]);
 
+  // Handle image error - just show error since thumbnails are reliable
+  const handleImageError = React.useCallback(() => {
+    setImageError(true);
+  }, []);
+
+  // Focus trap and keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
@@ -22,8 +89,19 @@ export function PreviewModal({
       if (e.key === 'ArrowRight' && hasNext) onNext();
     };
 
+    // Focus the modal on mount for keyboard accessibility
+    if (modalRef.current) {
+      modalRef.current.focus();
+    }
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
   }, [onClose, onNext, onPrevious, hasNext, hasPrevious]);
 
   // Handle download
@@ -59,17 +137,18 @@ export function PreviewModal({
     }
   };
 
-  // Reset loading states when wallpaper changes
-  useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
-  }, [wallpaper?.id]);
-
   if (!wallpaper) return null;
 
   return (
     <div className="preview-modal-overlay" onClick={onClose}>
-      <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+      <div 
+        className="preview-modal" 
+        onClick={(e) => e.stopPropagation()}
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+      >
         <button
           type="button"
           className="preview-close"
@@ -91,9 +170,14 @@ export function PreviewModal({
             </button>
           )}
 
-          <div className="preview-image-container">
+          <div 
+            className="preview-image-container"
+            style={{
+              aspectRatio: `${wallpaper.width} / ${wallpaper.height}`,
+            }}
+          >
             {!imageLoaded && !imageError && (
-              <div className="preview-image-loading">Loading image...</div>
+              <div className="preview-skeleton" aria-label="Loading image..." />
             )}
             {imageError && (
               <div className="preview-image-error">
@@ -101,12 +185,13 @@ export function PreviewModal({
               </div>
             )}
             <img
-              src={wallpaper.url}
+              key={imageUrl} // Force re-render when URL changes
+              src={imageUrl}
               alt={wallpaper.title}
               className="preview-image"
               style={{ opacity: imageLoaded ? 1 : 0 }}
               onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
+              onError={handleImageError}
             />
           </div>
 
@@ -124,15 +209,33 @@ export function PreviewModal({
 
         <div className="preview-info">
           <div className="preview-info-row">
-            <a 
-              href={wallpaper.permalink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="preview-title-link"
-              title="View on Wallhaven"
-            >
-              <h3 className="preview-title">{wallpaper.id}</h3>
-            </a>
+            <div className="preview-title-section">
+              <a 
+                href={wallpaper.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="preview-title-link"
+                title="View on Wallhaven"
+              >
+                <h3 className="preview-title">{wallpaper.id}</h3>
+              </a>
+              {/* Tags inline with title */}
+              {tags.length > 0 && (
+                <div className="preview-tags-inline">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className="preview-tag-inline"
+                      onClick={() => onTagClick?.(tag.name)}
+                      title={`Search for "${tag.name}"`}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="preview-actions">
               <button
                 type="button"
@@ -250,7 +353,7 @@ export function PreviewModal({
                       key={index}
                       className="preview-color-swatch"
                       style={{ backgroundColor: color }}
-                      title={`${color} - Click to search`}
+                      title={`${getColorName(color)} (${color}) - Click to search`}
                       onClick={() => onColorClick?.(color)}
                       aria-label={`Filter by color ${color}`}
                     />

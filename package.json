@@ -1,12 +1,16 @@
 {
   "name": "wallbrowser",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "A modern wallpaper browser for Wallhaven",
+  "author": "Bryant Welch",
+  "license": "MIT",
+  "homepage": "https://wallbrowser.com",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "echo 'No linter configured'"
   },
   "dependencies": {
     "jszip": "^3.10.1",
