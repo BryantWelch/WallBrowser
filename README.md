@@ -1,4 +1,9 @@
-# WallBrowser
+# WallBrowser (https://wallbrowser.com)
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/0e6b5822-0f39-4a4c-b047-6f4063de2267" width="900" alt="WallBrowser Demo">
+</p>
+
 
 A modern wallpaper browser for Wallhaven. Built with React, featuring advanced search, bulk downloads, and a beautiful interface.
 
