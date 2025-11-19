@@ -11,7 +11,15 @@ export function PaginationBar({
   canGoNext,
   canGoPrevious
 }) {
+  const paginationRef = React.useRef(null);
   const CHUNK_SIZE = 100; // Progressive navigation chunk size
+  
+  // Reset scroll position when page changes
+  React.useEffect(() => {
+    if (paginationRef.current) {
+      paginationRef.current.scrollLeft = 0;
+    }
+  }, [currentPage]);
 
   // Calculate the next chunk boundary
   // If on a chunk boundary (100, 200, etc), show the next chunk
@@ -100,7 +108,7 @@ export function PaginationBar({
         </div>
       )}
       
-      <div className="pagination-buttons">
+      <div className="pagination-buttons" ref={paginationRef} style={{ scrollBehavior: 'smooth' }}>
         <button
           type="button"
           className="secondary-button"

@@ -21,6 +21,7 @@ export function PreviewModal({
   const [loadingTags, setLoadingTags] = React.useState(false);
   const [imageUrl, setImageUrl] = React.useState('');
   const [useProxy, setUseProxy] = React.useState(true);
+  const [showAllTags, setShowAllTags] = React.useState(false);
   const modalRef = React.useRef(null);
   
   // Set image URL when wallpaper changes
@@ -222,7 +223,7 @@ export function PreviewModal({
               {/* Tags inline with title */}
               {tags.length > 0 && (
                 <div className="preview-tags-inline">
-                  {tags.map((tag) => (
+                  {(showAllTags ? tags : tags.slice(0, 10)).map((tag) => (
                     <button
                       key={tag.id}
                       type="button"
@@ -233,6 +234,16 @@ export function PreviewModal({
                       {tag.name}
                     </button>
                   ))}
+                  {tags.length > 10 && (
+                    <button
+                      type="button"
+                      className="preview-tag-expand"
+                      onClick={() => setShowAllTags(!showAllTags)}
+                      title={showAllTags ? 'Show less tags' : `Show ${tags.length - 10} more tags`}
+                    >
+                      {showAllTags ? '← Less' : `+${tags.length - 10} more`}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

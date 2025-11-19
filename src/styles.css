@@ -1719,25 +1719,469 @@ svg.action-icon {
     padding: 0.9rem 0.9rem 1.1rem;
   }
   
+  /* Stack search box and button vertically on mobile */
+  .controls-search-row {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  
+  .controls-search-row .control-item-search {
+    width: 100% !important;
+  }
+  
+  .controls-search-row .control-item-button {
+    width: 100%;
+  }
+  
+  .controls-search-row .control-item-button .primary-button {
+    width: 100%;
+  }
+  
   .controls-filters-row {
     gap: 0.6rem;
+  }
+  
+  /* Make filters stack better on mobile */
+  .control-item {
+    min-width: 100%;
+    flex: 1 1 100%;
+  }
+  
+  /* Aspect ratio smaller, resolution larger */
+  .control-item-ratio {
+    min-width: calc(35% - 0.3rem);
+    flex: 0 0 calc(35% - 0.3rem);
+  }
+  
+  .control-item-resolution {
+    min-width: calc(65% - 0.3rem);
+    flex: 1 1 calc(65% - 0.3rem);
+  }
+  
+  .control-item-sort,
+  .control-item-color,
+  .control-item-filetype,
+  .control-item-view {
+    min-width: calc(50% - 0.3rem);
+    flex: 1 1 calc(50% - 0.3rem);
+  }
+  
+  /* Content row - better mobile layout */
+  .controls-content-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .content-filters-group {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .categories-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .settings-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  /* Pagination - better overflow handling */
+  .pagination-bar {
+    padding: 1rem 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+  
+  .pagination-info {
+    width: 100%;
+    text-align: center;
+    flex-shrink: 0;
+    order: 1;
+  }
+  
+  .pagination-buttons {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    padding-bottom: 0.25rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    order: 2;
+    justify-content: flex-start;
+  }
+  
+  .page-button {
+    min-width: 2.5rem;
+    padding: 0.5rem 0.75rem;
+    flex-shrink: 0;
+  }
+  
+  .pagination-ellipsis,
+  .page-ellipsis {
+    padding: 0.5rem;
+    flex-shrink: 0;
+  }
+  
+  /* App header mobile adjustments */
+  .app-header {
+    padding: 1.25rem 1rem;
+  }
+  
+  .app-header h1 {
+    font-size: 1.35rem;
+  }
+  
+  .app-subtitle {
+    font-size: 0.8rem;
+  }
+  
+  .app-logo {
+    width: 2rem;
+    height: 2rem;
+  }
+  
+  .header-stats {
+    min-width: auto;
+    padding: 0.6rem 1rem;
+  }
+  
+  .header-stats-number {
+    font-size: 1.35rem;
+  }
+  
+  .header-stats-label {
+    font-size: 0.7rem;
+  }
+  
+  /* Results bar mobile */
+  .results-info {
+    font-size: 0.85rem;
+  }
+  
+  /* Selection buttons mobile */
+  .secondary-button,
+  .action-button {
+    padding: 0.65rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  /* Search hints mobile */
+  .search-hints {
+    left: 0;
+    right: 0;
+    max-width: 100%;
+    font-size: 0.85rem;
+  }
+  
+  /* Labels mobile */
+  label {
+    font-size: 0.85rem;
+  }
+  
+  /* Selects mobile */
+  select {
+    font-size: 0.9rem;
+  }
+  
+  /* Resolution dropdown - better text wrapping */
+  .control-item-resolution select {
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+  
+  .control-item-resolution select option {
+    font-size: 0.85rem;
+  }
+  
+  /* Resolution separator styling on mobile */
+  .resolution-separator {
+    font-size: 0.75rem;
+  }
+  
+  /* Results bar - stack rows cleanly */
+  .results-bar {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .results-info {
+    width: 100%;
+    order: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  /* Force Show selected and View favorites buttons to new lines */
+  .results-info .show-selected-button {
+    flex: 0 0 100%;
+    width: 100%;
+    margin-top: 0.5rem;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  
+  .results-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    width: 100%;
+    order: 2;
+    justify-content: center;
+  }
+  
+  /* Selection buttons: Select all, Deselect all - side by side */
+  .results-actions .secondary-button {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.85rem;
+    flex: 1 1 calc(50% - 0.25rem);
+    max-width: calc(50% - 0.25rem);
+  }
+  
+  /* Download button - centered full width */
+  .results-actions .action-button {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.85rem;
+    flex: 0 0 100%;
+    width: 100%;
+  }
+  
+  /* Modals - fit screen without horizontal scroll */
+  .modal-overlay {
+    padding: 0.5rem;
+    overflow-y: auto;
+  }
+  
+  .settings-modal,
+  .preview-modal,
+  .about-modal,
+  .privacy-modal {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+  }
+  
+  .settings-modal {
+    border-radius: 0.75rem;
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+  }
+  
+  .preview-modal-overlay {
+    padding: 0.5rem;
+    padding-top: 0.5rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start !important;
+  }
+  
+  .preview-modal {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: none;
+    padding: 0.5rem;
+    padding-top: 3rem;
+    overflow-y: visible;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    margin-top: 0;
+  }
+  
+  .preview-content {
+    max-width: 100%;
+    overflow: visible;
+    flex: 1;
+    display: block;
+    position: relative;
+  }
+  
+  /* Fix image container on mobile */
+  .preview-image-container {
+    max-height: 60vh !important;
+    min-height: auto !important;
+    height: auto !important;
+    width: 100%;
+    flex-shrink: 0;
+    position: relative;
+    overflow: visible !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    aspect-ratio: unset !important;
+  }
+  
+  /* Navigation arrows - overlay on image */
+  .preview-nav {
+    position: absolute !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 100 !important;
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+  
+  .preview-nav-left {
+    left: 0.5rem !important;
+  }
+  
+  .preview-nav-right {
+    right: 0.5rem !important;
+  }
+  
+  .preview-image {
+    max-height: 60vh !important;
+    max-width: 100% !important;
+    height: auto !important;
+    width: auto !important;
+    object-fit: contain !important;
+  }
+  
+  .preview-info {
+    padding: 0.75rem;
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+  
+  .preview-metadata {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    overflow-x: hidden;
+  }
+  
+  .preview-meta-item {
+    overflow-x: hidden;
+  }
+  
+  /* Tags */
+  .preview-tag-inline,
+  .preview-tag {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.65rem;
+  }
+  
+  .preview-tag-expand {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 0.25rem;
+    color: #60a5fa;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .preview-tag-expand:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.6);
+  }
+  
+  /* Preview modal buttons */
+  .preview-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .preview-action-button {
+    padding: 0.6rem;
+    min-width: 3rem;
+  }
+  
+  /* Color palette mobile */
+  .preview-colors {
+    gap: 0.4rem;
+  }
+  
+  .preview-color-swatch,
+  .color-swatch {
+    width: 2rem;
+    height: 2rem;
+  }
+  
+  /* Source URL - fix overflow */
+  .preview-source-link {
+    word-break: break-all;
+    overflow-wrap: break-word;
+    display: block;
+    max-width: 100%;
+  }
+  
+  .preview-meta-item-full {
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  /* Settings modal mobile adjustments */
+  .settings-header {
+    padding: 1.25rem 1rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .settings-content {
+    padding: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  
+  .settings-section {
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  
+  .settings-section h3 {
+    font-size: 1rem;
+    word-wrap: break-word;
+  }
+  
+  /* Input fields mobile */
+  input[type="text"],
+  input[type="password"] {
+    font-size: 0.9rem;
+    padding: 0.65rem 0.85rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Buttons in settings modal */
+  .settings-content button {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* API key container */
+  .settings-section > div {
+    max-width: 100%;
+    overflow-x: hidden;
   }
   
   .wallpaper-grid-comfortable {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
   
-  .preview-modal-overlay {
-    padding: 1rem;
-  }
-  
-  .preview-image-container {
-    max-height: 60vh;
-    min-height: 300px;
-  }
-  
-  .preview-image {
-    max-height: 60vh;
+  /* Close button fixed to viewport top */
+  .preview-close {
+    position: fixed !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    z-index: 10001 !important;
   }
 }
 
