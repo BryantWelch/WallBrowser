@@ -641,10 +641,47 @@ body {
   font-size: 0.9rem;
 }
 
-.wallpaper-grid.empty-state {
+/* Empty state styling */
+.empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 400px !important;
+  background: radial-gradient(circle at center, rgba(30, 64, 175, 0.15), transparent 70%),
+    rgba(15, 23, 42, 0.97);
+}
+
+.empty-state-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  max-width: 400px;
+  padding: 2rem;
+  gap: 1rem;
+}
+
+.empty-state-icon {
+  width: 4rem;
+  height: 4rem;
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-content h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.empty-state-content p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 0.95rem;
 }
 
 .wallpaper-card {

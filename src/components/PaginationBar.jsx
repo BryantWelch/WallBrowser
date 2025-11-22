@@ -102,7 +102,7 @@ export function PaginationBar({
   return (
     <div className="pagination-bar" role="navigation" aria-label="Pagination">
       {/* Total results info */}
-      {totalResults && (
+      {typeof totalResults === 'number' && (
         <div className="pagination-info" style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.5rem', textAlign: 'center' }}>
           {totalResults.toLocaleString()} wallpapers found • Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
         </div>
