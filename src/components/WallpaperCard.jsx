@@ -19,7 +19,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   const [retryCount, setRetryCount] = useState(0);
   const [imageUrl, setImageUrl] = useState(wallpaper.thumbUrl);
   
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 9;
 
   const label = useMemo(() => `${wallpaper.width}×${wallpaper.height}`, [wallpaper.width, wallpaper.height]);
   const formattedFileSize = useMemo(() => wallpaper.fileSize > 0 ? formatFileSize(wallpaper.fileSize) : null, [wallpaper.fileSize]);
@@ -37,6 +37,39 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     onToggleFavorite(wallpaper);
   }, [onToggleFavorite, wallpaper]);
 
+  const handleDownload = useCallback(async (e) => {
+    e.stopPropagation();
+    try {
+      // Convert Wallhaven URL to use our proxy
+      let proxyUrl = wallpaper.url;
+      if (proxyUrl.includes('w.wallhaven.cc')) {
+        proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
+      } else if (proxyUrl.includes('wallhaven.cc')) {
+        proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
+      }
+      
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const ext = wallpaper.url.split('.').pop() || 'jpg';
+      
+      // Create download link
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `wallhaven-${wallpaper.id}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Failed to download wallpaper. Please try again.');
+    }
+  }, [wallpaper]);
+
   const handleClick = useCallback(() => {
     onClick(wallpaper);
   }, [onClick, wallpaper]);
@@ -52,7 +85,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
         setImageUrl(`${wallpaper.thumbUrl}?retry=${retryCount + 1}`);
-      }, 500 * (retryCount + 1)); // Exponential backoff: 500ms, 1000ms
+      }, 250 * (retryCount + 1)); // Exponential backoff: 250ms, 500ms
     } else {
       setImageError(true);
     }
@@ -94,6 +127,20 @@ export const WallpaperCard = React.memo(function WallpaperCard({
         <span className={isFavorite ? 'heart heart-filled' : 'heart'}>
           {isFavorite ? '♥' : '♡'}
         </span>
+      </button>
+
+      <button
+        type="button"
+        className="wallpaper-download-toggle"
+        onClick={handleDownload}
+        title="Download wallpaper"
+        aria-label="Download wallpaper"
+      >
+        <svg className="action-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
       </button>
 
       <button

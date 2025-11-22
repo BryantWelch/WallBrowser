@@ -13,7 +13,8 @@ export function PreviewModal({
   onToggleFavorite,
   onColorClick,
   onTagClick,
-  fetchWallpaperDetails
+  fetchWallpaperDetails,
+  isLoadingPage = false
 }) {
   const [imageLoaded, setImageLoaded] = React.useState(false);
   const [imageError, setImageError] = React.useState(false);
@@ -22,6 +23,7 @@ export function PreviewModal({
   const [imageUrl, setImageUrl] = React.useState('');
   const [useProxy, setUseProxy] = React.useState(true);
   const [showAllTags, setShowAllTags] = React.useState(false);
+  const [retryCount, setRetryCount] = React.useState(0);
   const modalRef = React.useRef(null);
   
   // Set image URL when wallpaper changes
@@ -77,10 +79,24 @@ export function PreviewModal({
     loadTags();
   }, [wallpaper.id, fetchWallpaperDetails]);
 
-  // Handle image error - just show error since thumbnails are reliable
+  // Handle image error with retry logic
   const handleImageError = React.useCallback(() => {
-    setImageError(true);
-  }, []);
+    if (retryCount < MAX_RETRIES) {
+      // Retry with a small delay and cache-busting parameter
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        // Check if URL already has params
+        const separator = imageUrl.includes('?') ? '&' : '?';
+        // Remove existing retry param if present
+        const cleanUrl = imageUrl.replace(/[?&]retry=\d+/, '');
+        const newUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}retry=${retryCount + 1}`;
+        
+        setImageUrl(newUrl);
+      }, 250 * (retryCount + 1)); // Exponential backoff: 250ms, 500ms...
+    } else {
+      setImageError(true);
+    }
+  }, [retryCount, imageUrl]);
 
   // Focus trap and keyboard navigation
   useEffect(() => {
@@ -205,6 +221,13 @@ export function PreviewModal({
             >
               ›
             </button>
+          )}
+          
+          {/* Loading overlay for page transitions */}
+          {isLoadingPage && (
+            <div className="preview-loading-overlay">
+              <div className="preview-spinner"></div>
+            </div>
           )}
         </div>
 

@@ -89,6 +89,9 @@ function App() {
   
   // Total wallpapers in Wallhaven database
   const [totalWallpapers, setTotalWallpapers] = useState(null);
+
+  // Download status state
+  const [downloadStatus, setDownloadStatus] = useState('idle'); // 'idle', 'downloading', 'zipping', 'success', 'error'
   
   // Track last clicked index for shift-click range selection
   const lastClickedIndexRef = useRef(null);
@@ -322,19 +325,12 @@ function App() {
     const selected = Array.from(selectedWallpapers.values());
     if (selected.length === 0) return;
     
-    const downloadBtn = document.querySelector('[data-download-btn]');
-    const originalText = downloadBtn?.textContent;
-    
     try {
       if (selected.length === 1) {
         // Single file - download via proxy
         const wallpaper = selected[0];
         
-        // Show loading state
-        if (downloadBtn) {
-          downloadBtn.innerHTML = '⏳ Downloading...';
-          downloadBtn.disabled = true;
-        }
+        setDownloadStatus('downloading');
         
         // Use proxy for download
         let proxyUrl = wallpaper.url;
@@ -359,16 +355,8 @@ function App() {
         document.body.removeChild(link);
         URL.revokeObjectURL(blobUrl);
         
-        // Show success
-        if (downloadBtn) {
-          downloadBtn.innerHTML = '✓ Downloaded';
-          downloadBtn.classList.add('download-success');
-          setTimeout(() => {
-            downloadBtn.innerHTML = originalText;
-            downloadBtn.disabled = false;
-            downloadBtn.classList.remove('download-success');
-          }, 2000);
-        }
+        setDownloadStatus('success');
+        setTimeout(() => setDownloadStatus('idle'), 2000);
         return;
       }
       
@@ -376,11 +364,7 @@ function App() {
       const zip = new JSZip();
       const folder = zip.folder('wallpapers');
       
-      // Show loading state
-      if (downloadBtn) {
-        downloadBtn.innerHTML = '⏳ Creating ZIP...';
-        downloadBtn.disabled = true;
-      }
+      setDownloadStatus('zipping');
       
       // Fetch and add files to ZIP
       await Promise.all(selected.map(async (wallpaper, index) => {
@@ -421,28 +405,13 @@ function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
-      // Show success
-      if (downloadBtn) {
-        downloadBtn.innerHTML = '✓ Downloaded';
-        downloadBtn.classList.add('download-success');
-        setTimeout(() => {
-          downloadBtn.innerHTML = originalText;
-          downloadBtn.disabled = false;
-          downloadBtn.classList.remove('download-success');
-        }, 2000);
-      }
+      setDownloadStatus('success');
+      setTimeout(() => setDownloadStatus('idle'), 2000);
+      
     } catch (err) {
       console.error('Download failed:', err);
-      // Show error
-      if (downloadBtn) {
-        downloadBtn.innerHTML = '✕ Failed';
-        downloadBtn.classList.add('download-error');
-        setTimeout(() => {
-          downloadBtn.innerHTML = originalText;
-          downloadBtn.disabled = false;
-          downloadBtn.classList.remove('download-error');
-        }, 2000);
-      }
+      setDownloadStatus('error');
+      setTimeout(() => setDownloadStatus('idle'), 2000);
     }
   }, [selectedWallpapers]);
   
@@ -504,23 +473,48 @@ function App() {
     await fetchWallpapers(updatedFilters, 1);
   }, [filters, setFilters, resetPage, fetchWallpapers]);
   
+  // Ref to track if we need to reopen preview after page change
+  const shouldReopenPreviewRef = useRef(null); // 'next' or 'prev' or null
+
+  // Effect to reopen preview after page change
+  useEffect(() => {
+    if (shouldReopenPreviewRef.current && wallpapers.length > 0 && !isLoading) {
+      if (shouldReopenPreviewRef.current === 'next') {
+        setPreviewWallpaper(wallpapers[0]);
+      } else if (shouldReopenPreviewRef.current === 'prev') {
+        setPreviewWallpaper(wallpapers[wallpapers.length - 1]);
+      }
+      shouldReopenPreviewRef.current = null;
+    }
+  }, [wallpapers, isLoading]);
+
   const handlePreviewNext = useCallback(() => {
     const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
     if (currentIndex < wallpapers.length - 1) {
       setPreviewWallpaper(wallpapers[currentIndex + 1]);
+    } else if (canGoNext && !showOnlySelected && !showOnlyFavorites) {
+      // Go to next page
+      shouldReopenPreviewRef.current = 'next';
+      // Keep preview open with loading state
+      goToNextPage();
     }
-  }, [wallpapers, previewWallpaper]);
+  }, [wallpapers, previewWallpaper, canGoNext, showOnlySelected, showOnlyFavorites, goToNextPage]);
   
   const handlePreviewPrevious = useCallback(() => {
     const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
     if (currentIndex > 0) {
       setPreviewWallpaper(wallpapers[currentIndex - 1]);
+    } else if (canGoPrevious && !showOnlySelected && !showOnlyFavorites) {
+      // Go to previous page
+      shouldReopenPreviewRef.current = 'prev';
+      // Keep preview open with loading state
+      goToPreviousPage();
     }
-  }, [wallpapers, previewWallpaper]);
+  }, [wallpapers, previewWallpaper, canGoPrevious, showOnlySelected, showOnlyFavorites, goToPreviousPage]);
   
   const previewIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
-  const hasNextPreview = previewIndex < wallpapers.length - 1;
-  const hasPreviousPreview = previewIndex > 0;
+  const hasNextPreview = previewIndex < wallpapers.length - 1 || (canGoNext && !showOnlySelected && !showOnlyFavorites);
+  const hasPreviousPreview = previewIndex > 0 || (canGoPrevious && !showOnlySelected && !showOnlyFavorites);
   
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -713,14 +707,17 @@ function App() {
 
                 <button
                   type="button"
-                  className="primary-button download-button"
+                  className={`primary-button download-button ${downloadStatus === 'success' ? 'download-success' : ''} ${downloadStatus === 'error' ? 'download-error' : ''}`}
                   onClick={handleDownloadSelected}
-                  disabled={!selectedCount}
-                  data-download-btn
+                  disabled={!selectedCount || downloadStatus === 'downloading' || downloadStatus === 'zipping'}
                   aria-label={`Download ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''}`}
                   title={`Download ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''}`}
                 >
-                  Download selected ({selectedCount})
+                  {downloadStatus === 'downloading' && '⏳ Downloading...'}
+                  {downloadStatus === 'zipping' && '⏳ Creating ZIP...'}
+                  {downloadStatus === 'success' && '✓ Downloaded'}
+                  {downloadStatus === 'error' && '✕ Failed'}
+                  {downloadStatus === 'idle' && `Download selected (${selectedCount})`}
                 </button>
               </div>
             </div>
@@ -794,6 +791,7 @@ function App() {
           onColorClick={handleColorClick}
           onTagClick={handleTagClick}
           fetchWallpaperDetails={fetchWallpaperDetails}
+          isLoadingPage={isLoading}
         />
       )}
 
