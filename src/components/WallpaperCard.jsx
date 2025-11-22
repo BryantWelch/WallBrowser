@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatFileSize } from '../utils';
 import { getColorName } from '../constants';
+import { useToast } from '../context/ToastContext';
 
 export const WallpaperCard = React.memo(function WallpaperCard({ 
   wallpaper,
@@ -14,6 +15,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   onSearchSimilar,
   viewMode = 'comfortable'
 }) {
+  const { addToast } = useToast();
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -35,7 +37,12 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   const handleFavorite = useCallback((e) => {
     e.stopPropagation();
     onToggleFavorite(wallpaper);
-  }, [onToggleFavorite, wallpaper]);
+    if (!isFavorite) {
+      addToast('Added to favorites', 'success', 2000);
+    } else {
+      addToast('Removed from favorites', 'info', 2000);
+    }
+  }, [onToggleFavorite, wallpaper, isFavorite, addToast]);
 
   const handleDownload = useCallback(async (e) => {
     e.stopPropagation();
@@ -64,11 +71,13 @@ export const WallpaperCard = React.memo(function WallpaperCard({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
+      
+      addToast('Download complete!', 'success');
     } catch (err) {
       console.error('Download failed:', err);
-      alert('Failed to download wallpaper. Please try again.');
+      addToast('Failed to download wallpaper. Please try again.', 'error');
     }
-  }, [wallpaper]);
+  }, [wallpaper, addToast]);
 
   const handleClick = useCallback(() => {
     onClick(wallpaper);

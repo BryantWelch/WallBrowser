@@ -15,8 +15,11 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
 import { clearCache } from './utils';
 import { getStoredApiKey } from './utils/apiKeyStorage';
+import { ToastContainer } from './components/Toast';
+import { useToast } from './context/ToastContext';
 
 function App() {
+  const { addToast } = useToast();
   // Always start with default filters - no persistence
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useLocalStorage(STORAGE_KEYS.VIEW_MODE, VIEW_MODES.COMFORTABLE);
@@ -188,6 +191,10 @@ function App() {
     if (!filtersRef.current || !filtersRef.current.categories) {
       return;
     }
+    
+    // Scroll to top smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
     fetchWallpapers(filtersRef.current, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
@@ -356,6 +363,7 @@ function App() {
         URL.revokeObjectURL(blobUrl);
         
         setDownloadStatus('success');
+        addToast('Download complete!', 'success');
         setTimeout(() => setDownloadStatus('idle'), 2000);
         return;
       }
@@ -365,6 +373,7 @@ function App() {
       const folder = zip.folder('wallpapers');
       
       setDownloadStatus('zipping');
+      addToast(`Preparing ZIP for ${selected.length} wallpapers...`, 'loading', 3000);
       
       // Fetch and add files to ZIP
       await Promise.all(selected.map(async (wallpaper, index) => {
@@ -406,14 +415,16 @@ function App() {
       URL.revokeObjectURL(blobUrl);
       
       setDownloadStatus('success');
+      addToast('ZIP download ready!', 'success');
       setTimeout(() => setDownloadStatus('idle'), 2000);
       
     } catch (err) {
       console.error('Download failed:', err);
       setDownloadStatus('error');
+      addToast('Download failed. Please try again.', 'error');
       setTimeout(() => setDownloadStatus('idle'), 2000);
     }
-  }, [selectedWallpapers]);
+  }, [selectedWallpapers, addToast]);
   
   // Preview navigation
   const handleWallpaperClick = useCallback((wallpaper) => {
@@ -811,6 +822,8 @@ function App() {
         isOpen={isPrivacyOpen}
         onClose={() => setIsPrivacyOpen(false)}
       />
+      
+      <ToastContainer />
     </div>
   );
 }
