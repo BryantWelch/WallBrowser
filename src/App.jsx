@@ -801,6 +801,7 @@ function App() {
           onToggleFavorite={toggleFavorite}
           onColorClick={handleColorClick}
           onTagClick={handleTagClick}
+          onSearchSimilar={handleSearchSimilar}
           fetchWallpaperDetails={fetchWallpaperDetails}
           isLoadingPage={isLoading}
         />

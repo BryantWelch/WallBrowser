@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { formatFileSize } from '../utils';
+import { formatFileSize, formatRelativeDate } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
 
@@ -14,6 +14,7 @@ export function PreviewModal({
   onToggleFavorite,
   onColorClick,
   onTagClick,
+  onSearchSimilar,
   fetchWallpaperDetails,
   isLoadingPage = false
 }) {
@@ -298,6 +299,21 @@ export function PreviewModal({
               </button>
               <button
                 type="button"
+                className="preview-action-button preview-action-similar"
+                onClick={() => {
+                  onSearchSimilar?.(wallpaper.id);
+                  onClose();
+                }}
+                aria-label="Find similar wallpapers"
+                title="Find similar wallpapers"
+              >
+                <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
+              </button>
+              <button
+                type="button"
                 onClick={handleDownload}
                 className="preview-action-button preview-action-download"
                 aria-label="Download wallpaper"
@@ -323,6 +339,21 @@ export function PreviewModal({
                   <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </a>
+              {wallpaper.source && (
+                <a
+                  href={wallpaper.source}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="preview-action-button preview-action-source"
+                  aria-label="View original source"
+                  title={`View source: ${wallpaper.source}`}
+                >
+                  <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                  </svg>
+                </a>
+              )}
             </div>
           </div>
 
@@ -331,8 +362,10 @@ export function PreviewModal({
               <span className="preview-meta-label">Resolution</span>
               <span className="preview-meta-value">
                 {wallpaper.width} × {wallpaper.height}
-                {wallpaper.ratio && <span className="preview-meta-secondary"> ({wallpaper.ratio}:1)</span>}
               </span>
+              {wallpaper.ratio && (
+                <span className="preview-meta-secondary">({wallpaper.ratio}:1)</span>
+              )}
             </div>
             
             {wallpaper.fileSize > 0 && (
@@ -340,17 +373,17 @@ export function PreviewModal({
                 <span className="preview-meta-label">File Size</span>
                 <span className="preview-meta-value">
                   {formatFileSize(wallpaper.fileSize)}
-                  {wallpaper.fileType && (
-                    <span className="preview-meta-secondary">
-                      {' '}· {wallpaper.fileType === 'image/png' ? 'PNG' : 'JPEG'}
-                    </span>
-                  )}
                 </span>
+                {wallpaper.fileType && (
+                  <span className="preview-meta-secondary">
+                    {wallpaper.fileType === 'image/png' ? 'PNG' : 'JPEG'}
+                  </span>
+                )}
               </div>
             )}
             
             <div className="preview-meta-item">
-              <span className="preview-meta-label">Author</span>
+              <span className="preview-meta-label">Uploader</span>
               <span className="preview-meta-value">
                 {wallpaper.authorAvatar && (
                   <img 
@@ -360,42 +393,50 @@ export function PreviewModal({
                   />
                 )}
                 {wallpaper.author}
-                {wallpaper.authorGroup && (
-                  <span className="preview-meta-secondary"> · {wallpaper.authorGroup}</span>
-                )}
-                {wallpaper.author === 'Anonymous' && (
-                  <span 
-                    className="preview-meta-hint" 
-                    title="Add a Wallhaven API key in src/constants.js to see uploader names"
-                  >
-                    {' '}(add API key to see)
-                  </span>
-                )}
               </span>
+              {wallpaper.author === 'Anonymous' && (
+                <span className="preview-meta-secondary preview-meta-hint">
+                  (add API key to see)
+                </span>
+              )}
             </div>
-            
-            <div className="preview-meta-item">
-              <span className="preview-meta-label">Favorites</span>
-              <span className="preview-meta-value">{wallpaper.ups}</span>
-            </div>
-            
-            {wallpaper.views > 0 && (
-              <div className="preview-meta-item">
-                <span className="preview-meta-label">Views</span>
-                <span className="preview-meta-value">{wallpaper.views.toLocaleString()}</span>
-              </div>
-            )}
             
             <div className="preview-meta-item">
               <span className="preview-meta-label">Category</span>
               <span className="preview-meta-value">{wallpaper.category}</span>
             </div>
             
+            <div className="preview-meta-item">
+              <span className="preview-meta-label">Purity</span>
+              <span className={`preview-meta-value preview-purity preview-purity-${wallpaper.purity || 'sfw'}`}>
+                {(wallpaper.purity || 'sfw').toUpperCase()}
+              </span>
+            </div>
+            
+            <div className="preview-meta-item">
+              <span className="preview-meta-label">Views</span>
+              <span className="preview-meta-value">{(wallpaper.views || 0).toLocaleString()}</span>
+            </div>
+            
+            <div className="preview-meta-item">
+              <span className="preview-meta-label">Favorites</span>
+              <span className="preview-meta-value">{(wallpaper.ups || 0).toLocaleString()}</span>
+            </div>
+            
+            {wallpaper.createdAt && (
+              <div className="preview-meta-item">
+                <span className="preview-meta-label">Uploaded</span>
+                <span className="preview-meta-value">
+                  {formatRelativeDate(wallpaper.createdAt)}
+                </span>
+              </div>
+            )}
+            
             {wallpaper.colors && wallpaper.colors.length > 0 && (
               <div className="preview-meta-item preview-meta-item-colors">
                 <span className="preview-meta-label">Colors</span>
                 <div className="preview-colors">
-                  {wallpaper.colors.map((color, index) => (
+                  {wallpaper.colors.slice(0, 5).map((color, index) => (
                     <button
                       type="button"
                       key={index}
@@ -407,23 +448,6 @@ export function PreviewModal({
                     />
                   ))}
                 </div>
-              </div>
-            )}
-            
-            {wallpaper.source && (
-              <div className="preview-meta-item preview-meta-item-full">
-                <span className="preview-meta-label">Source</span>
-                <a 
-                  href={wallpaper.source}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="preview-source-link"
-                >
-                  {wallpaper.source.length > 50 
-                    ? wallpaper.source.substring(0, 47) + '...'
-                    : wallpaper.source
-                  } →
-                </a>
               </div>
             )}
           </div>
