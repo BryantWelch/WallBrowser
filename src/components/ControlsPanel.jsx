@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   RESOLUTION_PRESETS,
   COLOR_OPTIONS,
@@ -8,6 +8,7 @@ import {
   VIEW_MODES,
   FILE_TYPE_OPTIONS,
 } from '../constants';
+import { formatHistoryTime } from '../hooks/useSearchHistory';
 
 export function ControlsPanel({
   filters,
@@ -20,6 +21,10 @@ export function ControlsPanel({
   viewMode,
   onViewModeChange,
   onOpenSettings,
+  searchHistory = [],
+  onSelectHistory,
+  onRemoveHistory,
+  onClearHistory,
 }) {
   const filteredResolutionPresets = useMemo(() => {
     if (!filters.ratio) {
@@ -59,12 +64,49 @@ export function ControlsPanel({
     return RESOLUTION_PRESETS.filter((preset) => preset.ratio === filters.ratio);
   }, [filters.ratio]);
 
-  const [showSearchHints, setShowSearchHints] = React.useState(false);
-  const searchHintsRef = React.useRef(null);
-  const searchButtonRef = React.useRef(null);
+  const [showSearchHints, setShowSearchHints] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const searchHintsRef = useRef(null);
+  const searchButtonRef = useRef(null);
+  
+  // Detect user's display resolution
+  const userDisplay = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    
+    const width = Math.round(window.screen.width * (window.devicePixelRatio || 1));
+    const height = Math.round(window.screen.height * (window.devicePixelRatio || 1));
+    
+    // Calculate aspect ratio
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    const divisor = gcd(width, height);
+    const ratioW = width / divisor;
+    const ratioH = height / divisor;
+    
+    // Map to common aspect ratio format for Wallhaven API
+    let apiRatio = '';
+    const ratio = width / height;
+    if (Math.abs(ratio - 16/9) < 0.1) apiRatio = '16x9';
+    else if (Math.abs(ratio - 16/10) < 0.1) apiRatio = '16x10';
+    else if (Math.abs(ratio - 21/9) < 0.1) apiRatio = '21x9';
+    else if (Math.abs(ratio - 32/9) < 0.1) apiRatio = '32x9';
+    else if (Math.abs(ratio - 4/3) < 0.1) apiRatio = '4x3';
+    else if (Math.abs(ratio - 5/4) < 0.1) apiRatio = '5x4';
+    else if (Math.abs(ratio - 3/2) < 0.1) apiRatio = '3x2';
+    
+    return {
+      width,
+      height,
+      value: `${width}x${height}`,
+      label: `🖥 My Display (${width}×${height})`,
+      ratioLabel: `${ratioW}:${ratioH}`,
+      apiRatio
+    };
+  }, []);
+  const historyRef = useRef(null);
+  const historyButtonRef = useRef(null);
 
   // Close search hints when clicking outside
-  React.useEffect(() => {
+  useEffect(() => {
     if (!showSearchHints) return;
 
     const handleClickOutside = (event) => {
@@ -80,6 +122,28 @@ export function ControlsPanel({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSearchHints]);
+
+  // Close history dropdown when clicking outside
+  useEffect(() => {
+    if (!showHistory) return;
+
+    const handleClickOutside = (event) => {
+      const clickedButton = historyButtonRef.current && historyButtonRef.current.contains(event.target);
+      const clickedDropdown = historyRef.current && historyRef.current.contains(event.target);
+      
+      if (!clickedButton && !clickedDropdown) {
+        setShowHistory(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showHistory]);
+
+  const handleSelectHistory = (entry) => {
+    onSelectHistory?.(entry.filters);
+    setShowHistory(false);
+  };
 
   const handleSearchKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -105,6 +169,13 @@ export function ControlsPanel({
             </button>
           </label>
           <div className="search-input-wrapper">
+            <div className="search-input-prefix">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span className="search-input-divider">|</span>
+            </div>
             <input
               id="query"
               type="text"
@@ -140,6 +211,79 @@ export function ControlsPanel({
             </div>
           )}
         </div>
+        
+        {/* History button */}
+        <div className="control-item control-item-history">
+          <button
+            ref={historyButtonRef}
+            type="button"
+            className={`history-button ${showHistory ? 'active' : ''}`}
+            onClick={() => setShowHistory(!showHistory)}
+            title="Search history"
+            aria-label="Search history"
+            aria-expanded={showHistory}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>History</span>
+          </button>
+          
+          {showHistory && (
+            <div className="history-dropdown" ref={historyRef}>
+              <div className="history-header">
+                <span>Recent Searches</span>
+                {searchHistory.length > 0 && (
+                  <button
+                    type="button"
+                    className="history-clear-all"
+                    onClick={() => {
+                      onClearHistory?.();
+                      setShowHistory(false);
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+              
+              {searchHistory.length === 0 ? (
+                <div className="history-empty">
+                  <span>No recent searches</span>
+                </div>
+              ) : (
+                <ul className="history-list">
+                  {searchHistory.map((entry) => (
+                    <li key={entry.id} className="history-item">
+                      <button
+                        type="button"
+                        className="history-item-button"
+                        onClick={() => handleSelectHistory(entry)}
+                      >
+                        <span className="history-item-summary">{entry.summary}</span>
+                        <span className="history-item-time">{formatHistoryTime(entry.timestamp)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="history-item-remove"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveHistory?.(entry.id);
+                        }}
+                        title="Remove from history"
+                        aria-label="Remove from history"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+        
         <div className="control-item control-item-button">
           <button
             className="primary-button"
@@ -194,16 +338,24 @@ export function ControlsPanel({
               onChange={(e) => {
                 const selectedResolution = e.target.value;
                 if (selectedResolution) {
-                  // Find the ratio for this resolution
-                  const preset = RESOLUTION_PRESETS.find(p => p.value === selectedResolution);
-                  if (preset && preset.ratio) {
-                    // Auto-set aspect ratio based on resolution
+                  // Check if it's the user's display resolution
+                  if (selectedResolution === userDisplay?.value) {
                     onMultipleFilterChanges?.({
                       resolution: selectedResolution,
-                      ratio: preset.ratio
+                      ratio: userDisplay.apiRatio || ''
                     });
                   } else {
-                    onFilterChange('resolution', selectedResolution);
+                    // Find the ratio for this resolution
+                    const preset = RESOLUTION_PRESETS.find(p => p.value === selectedResolution);
+                    if (preset && preset.ratio) {
+                      // Auto-set aspect ratio based on resolution
+                      onMultipleFilterChanges?.({
+                        resolution: selectedResolution,
+                        ratio: preset.ratio
+                      });
+                    } else {
+                      onFilterChange('resolution', selectedResolution);
+                    }
                   }
                 } else {
                   // Clearing resolution
@@ -213,6 +365,14 @@ export function ControlsPanel({
               aria-label="Minimum resolution"
             >
               <option value="">Any</option>
+              {userDisplay && (!filters.ratio || filters.ratio === userDisplay.apiRatio) && (
+                <>
+                  <option disabled className="resolution-separator">─── My Display ───</option>
+                  <option value={userDisplay.value}>
+                    {userDisplay.width}×{userDisplay.height}
+                  </option>
+                </>
+              )}
               {filteredResolutionPresets.map((preset) => (
                 <option 
                   key={preset.value} 

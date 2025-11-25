@@ -12,6 +12,7 @@ import { useWallhavenAPI } from './hooks/useWallhavenAPI';
 import { usePagination } from './hooks/usePagination';
 import { useFavorites } from './hooks/useFavorites';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
 import { clearCache } from './utils';
 import { getStoredApiKey } from './utils/apiKeyStorage';
@@ -71,6 +72,9 @@ function App() {
   
   // Favorites management
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  
+  // Search history management
+  const { history: searchHistory, addToHistory, removeFromHistory, clearHistory } = useSearchHistory();
   
   // Preview modal state
   const [previewWallpaper, setPreviewWallpaper] = useState(null);
@@ -153,6 +157,9 @@ function App() {
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
     
+    // Add to search history
+    addToHistory(filters);
+    
     // If already on page 1, just fetch. If not, reset to page 1 (which triggers auto-fetch via useEffect)
     if (page === 1) {
       await fetchWallpapers(filters, 1);
@@ -160,7 +167,20 @@ function App() {
       resetPage(); // This will trigger the page change useEffect which handles the fetch
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page, resetPage]);
+  }, [filters, page, resetPage, addToHistory]);
+  
+  // Handle selecting a search from history
+  const handleSelectHistory = useCallback((historyFilters) => {
+    // Apply the filters from history
+    setFilters(historyFilters);
+    // Clear selections
+    setSelectedIds(new Set());
+    setSelectedWallpapers(new Map());
+    // Reset to page 1 and fetch
+    clearCache();
+    resetPage();
+    fetchWallpapers(historyFilters, 1);
+  }, [resetPage, fetchWallpapers]);
   
   // Keep latest filters in a ref so page navigation always uses current filters
   const filtersRef = useRef(filters);
@@ -633,6 +653,10 @@ function App() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          searchHistory={searchHistory}
+          onSelectHistory={handleSelectHistory}
+          onRemoveHistory={removeFromHistory}
+          onClearHistory={clearHistory}
         />
 
         <PaginationBar

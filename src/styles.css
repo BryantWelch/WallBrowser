@@ -244,6 +244,11 @@ body {
   min-width: auto !important;
 }
 
+.controls-search-row .control-item-history {
+  flex: 0 0 auto !important;
+  min-width: auto !important;
+}
+
 /* Filters row */
 .controls-filters-row {
   display: flex;
@@ -272,8 +277,10 @@ body {
 
 .content-filters-label {
   font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
@@ -307,8 +314,8 @@ body {
 }
 
 .control-item-resolution {
-  max-width: 180px;
-  min-width: 160px;
+  max-width: 220px;
+  min-width: 190px;
   flex-shrink: 0;
 }
 
@@ -341,10 +348,160 @@ body {
   align-items: flex-end;
 }
 
+/* History button */
+.control-item-history {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
+.history-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.history-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  stroke-width: 2;
+}
+
+.history-button:hover {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.history-button.active {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.15);
+}
+
+/* History dropdown */
+.history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  min-width: 320px;
+  max-width: 400px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(75, 85, 99, 0.8);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(75, 85, 99, 0.5);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.history-clear-all {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: background 0.15s;
+}
+
+.history-clear-all:hover {
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.history-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-item-button:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.history-item-summary {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.history-item-time {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.history-item-remove {
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.history-item-remove:hover {
+  color: #ef4444;
+}
+
 .control-item label {
   font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .control-item input[type="text"],
@@ -920,6 +1077,13 @@ body {
   line-height: 1;
   display: inline-flex;
   align-items: center;
+}
+
+.wallpaper-icon-svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-right: 0.25rem;
+  flex-shrink: 0;
 }
 
 .error-banner {
@@ -1741,14 +1905,16 @@ svg.action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  margin-left: 0.375rem;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.35rem;
+  position: relative;
+  top: -1px;
   background: rgba(59, 130, 246, 0.2);
   border: 1px solid rgba(59, 130, 246, 0.4);
   border-radius: 50%;
   color: var(--accent);
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.15s;
@@ -1767,9 +1933,37 @@ svg.action-icon {
   align-items: center;
 }
 
-.search-input-wrapper input {
+.search-input-prefix {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input-prefix svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke-width: 2.5;
+}
+
+.search-input-divider {
+  color: rgba(100, 116, 139, 0.6);
+  font-weight: 300;
+  font-size: 1rem;
+  margin-left: 0.1rem;
+  margin-top: -4px;
+}
+
+.search-input-wrapper input,
+.search-input-wrapper input[type="text"] {
   flex: 1;
-  padding-right: 2.25rem;
+  padding: 0.5rem 2.25rem 0.5rem 3.25rem !important;
 }
 
 .search-clear-button {
@@ -1975,6 +2169,26 @@ svg.action-icon {
   
   .controls-search-row .control-item-button .primary-button {
     width: 100%;
+  }
+  
+  /* History button on mobile */
+  .controls-search-row .control-item-history {
+    width: auto;
+    flex: 0 0 auto;
+  }
+  
+  .history-button span {
+    display: none;
+  }
+  
+  .history-button {
+    padding: 0.5rem 0.65rem;
+  }
+  
+  .history-dropdown {
+    left: auto;
+    right: 0;
+    min-width: 280px;
   }
   
   .controls-filters-row {
@@ -2560,7 +2774,14 @@ svg.action-icon {
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-visibility-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .toggle-visibility-button:hover {
