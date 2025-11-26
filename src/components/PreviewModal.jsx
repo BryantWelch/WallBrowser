@@ -187,7 +187,10 @@ export function PreviewModal({
           onClick={onClose}
           aria-label="Close preview"
         >
-          ×
+          <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
 
         <div className="preview-content">
@@ -198,7 +201,9 @@ export function PreviewModal({
               onClick={onPrevious}
               aria-label="Previous wallpaper"
             >
-              ‹
+              <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </button>
           )}
 
@@ -234,7 +239,9 @@ export function PreviewModal({
               onClick={onNext}
               aria-label="Next wallpaper"
             >
-              ›
+              <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
             </button>
           )}
           
@@ -256,7 +263,10 @@ export function PreviewModal({
                 className="preview-title-link"
                 title="View on Wallhaven"
               >
-                <h3 className="preview-title">{wallpaper.id}</h3>
+                <h3 className="preview-title">
+                  <span className="preview-id-prefix">#</span>
+                  {wallpaper.id}
+                </h3>
               </a>
               {/* Tags inline with title */}
               {tags.length > 0 && (
