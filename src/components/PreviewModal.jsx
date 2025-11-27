@@ -3,7 +3,7 @@ import { formatFileSize, formatRelativeDate } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
-import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl } from '../utils/imageUtils';
+import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl } from '../utils/imageUtils';
 
 export function PreviewModal({ 
   wallpaper, 
@@ -38,7 +38,18 @@ export function PreviewModal({
     handleLoad,
     handleError,
     reset,
-  } = useImageWithRetry(fullImageUrl, IMAGE_RETRY_CONFIG);
+  } = useImageWithRetry(fullImageUrl, {
+    ...IMAGE_RETRY_CONFIG,
+    maxRetries: 3,
+    // On hard failure, fall back once to the Cloudflare Worker URL for this full image.
+    onHardFailure: ({ lastUrl }) => {
+      // If we're already using the worker URL, don't loop.
+      if (lastUrl.startsWith('https://images.wallbrowser.com')) {
+        return null;
+      }
+      return toWorkerFullUrl(wallpaper.url);
+    },
+  });
 
   // Reset proxy flag when wallpaper changes
   React.useEffect(() => {
@@ -388,11 +399,6 @@ export function PreviewModal({
                 )}
                 {uploaderName || wallpaper.author}
               </span>
-              {(uploaderName || wallpaper.author) === 'Anonymous' && (
-                <span className="preview-meta-secondary preview-meta-hint">
-                  (add API key to see)
-                </span>
-              )}
             </div>
             
             <div className="preview-meta-item">

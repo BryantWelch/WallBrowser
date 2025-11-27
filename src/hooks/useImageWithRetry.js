@@ -2,16 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { IMAGE_RETRY_CONFIG } from '../utils/imageUtils';
 
 // Shared hook for images that need retry + watchdog behavior
+// config can include an optional onHardFailure({ lastUrl }) callback that returns a fallback URL.
 export function useImageWithRetry(baseUrl, config = {}) {
   const {
     maxRetries = IMAGE_RETRY_CONFIG.maxRetries,
     retryDelayBase = IMAGE_RETRY_CONFIG.retryDelayBase,
     watchdogTimeout = IMAGE_RETRY_CONFIG.watchdogTimeout,
+    onHardFailure,
   } = config;
   const [imageUrl, setImageUrl] = useState(baseUrl || '');
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [currentBaseUrl, setCurrentBaseUrl] = useState(baseUrl || '');
+  const [hasUsedFallback, setHasUsedFallback] = useState(false);
 
   // Reset state when base URL changes
   useEffect(() => {
@@ -19,6 +23,8 @@ export function useImageWithRetry(baseUrl, config = {}) {
     setImageError(false);
     setRetryCount(0);
     setImageUrl(baseUrl || '');
+    setCurrentBaseUrl(baseUrl || '');
+    setHasUsedFallback(false);
   }, [baseUrl]);
 
   const buildRetryUrl = useCallback((url, attempt) => {
@@ -33,29 +39,58 @@ export function useImageWithRetry(baseUrl, config = {}) {
   }, []);
 
   const handleError = useCallback(() => {
+    const sourceUrl = currentBaseUrl || imageUrl;
+
     if (retryCount < maxRetries) {
       setTimeout(() => {
         setRetryCount((prev) => {
           const next = prev + 1;
           if (next > maxRetries) {
+            // Give caller a chance to provide a fallback URL (e.g., Worker proxy)
+            if (!hasUsedFallback && onHardFailure) {
+              const fallbackUrl = onHardFailure({ lastUrl: sourceUrl });
+              if (fallbackUrl && fallbackUrl !== imageUrl) {
+                setImageLoaded(false);
+                setImageError(false);
+                setRetryCount(0);
+                setHasUsedFallback(true);
+                setCurrentBaseUrl(fallbackUrl);
+                setImageUrl(fallbackUrl);
+                return 0;
+              }
+            }
             setImageError(true);
             return prev;
           }
-          const newUrl = buildRetryUrl(baseUrl || imageUrl, next);
+          const newUrl = buildRetryUrl(sourceUrl, next);
           setImageUrl(newUrl);
           return next;
         });
       }, retryDelayBase * (retryCount + 1));
     } else {
+      if (!hasUsedFallback && onHardFailure) {
+        const fallbackUrl = onHardFailure({ lastUrl: sourceUrl });
+        if (fallbackUrl && fallbackUrl !== imageUrl) {
+          setImageLoaded(false);
+          setImageError(false);
+          setRetryCount(0);
+          setHasUsedFallback(true);
+          setCurrentBaseUrl(fallbackUrl);
+          setImageUrl(fallbackUrl);
+          return;
+        }
+      }
       setImageError(true);
     }
-  }, [retryCount, maxRetries, retryDelayBase, baseUrl, imageUrl, buildRetryUrl]);
+  }, [retryCount, maxRetries, retryDelayBase, currentBaseUrl, imageUrl, buildRetryUrl, onHardFailure, hasUsedFallback]);
 
   const reset = useCallback(() => {
     setImageLoaded(false);
     setImageError(false);
     setRetryCount(0);
     setImageUrl(baseUrl || '');
+    setCurrentBaseUrl(baseUrl || '');
+    setHasUsedFallback(false);
   }, [baseUrl]);
 
   // Watchdog: if the image stays in loading state too long without load/error,
