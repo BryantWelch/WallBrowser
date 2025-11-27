@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { API_CONFIG } from '../constants';
 import { getCachedData, setCachedData, generateCacheKey, parseWallhavenResponse, retryWithBackoff } from '../utils';
+import { prefetchImage } from '../utils/imageUtils';
 import { getStoredApiKey } from '../utils/apiKeyStorage';
 
 /**
@@ -220,12 +221,7 @@ export function useWallhavenAPI() {
   const prefetchPages = useCallback(async (filters, currentPage, totalPages) => {
     const pagesToPrefetch = [];
     
-    // Prefetch previous page
-    if (currentPage > 1) {
-      pagesToPrefetch.push(currentPage - 1);
-    }
-    
-    // Prefetch next page
+    // Only prefetch the next page to reduce upstream load
     if (currentPage < totalPages) {
       pagesToPrefetch.push(currentPage + 1);
     }
@@ -263,22 +259,11 @@ export function useWallhavenAPI() {
 
           // Cache the result
           setCachedData(cacheKey, { wallpapers, lastPage, total }, API_CONFIG.CACHE_DURATION);
-          
-          // Preload all images in background for instant navigation
-          // Browser HTTP cache handles the actual caching, these Image objects are just for triggering the download
+
+          // Preload thumbnails only for smoother grid navigation.
+          // Full-size images are loaded on demand in the preview modal.
           wallpapers.forEach(wallpaper => {
-            // Preload thumbnail for grid view
-            const thumb = new Image();
-            thumb.src = wallpaper.thumbUrl;
-            
-            // Preload full-size image for preview modal
-            const full = new Image();
-            if (wallpaper.url.includes('w.wallhaven.cc')) {
-              full.src = wallpaper.url.replace('https://w.wallhaven.cc', '/proxy/image');
-            } else {
-              full.src = wallpaper.url;
-            }
-            // No references stored - browser GC cleans up objects, HTTP cache retains images
+            prefetchImage(wallpaper.thumbUrl);
           });
         }
       } catch (err) {

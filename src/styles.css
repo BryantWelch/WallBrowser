@@ -233,6 +233,7 @@ body {
 }
 
 .controls-search-row .control-item-search {
+  position: relative;
   flex: 1 1 0% !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -390,7 +391,7 @@ body {
 .history-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
   margin-top: 0.5rem;
   min-width: 320px;
   max-width: 400px;
@@ -2002,14 +2003,12 @@ svg.action-icon {
 .search-input-wrapper input,
 .search-input-wrapper input[type="text"] {
   flex: 1;
-  padding: 0.5rem 2.25rem 0.5rem 3.25rem !important;
+  padding: 0.5rem 3.5rem 0.5rem 3.25rem !important;
 }
 
 .search-clear-button {
-  position: absolute;
-  right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
+  position: static;
+  transform: none;
   background: rgba(75, 85, 99, 0.3);
   border: 1px solid rgba(75, 85, 99, 0.4);
   color: var(--text-muted);
@@ -2030,7 +2029,45 @@ svg.action-icon {
   background: rgba(75, 85, 99, 0.5);
   border-color: var(--accent);
   color: var(--text-primary);
-  transform: translateY(-50%) scale(1.1);
+  transform: scale(1.1);
+}
+
+.search-input-suffix {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  z-index: 1;
+}
+
+.search-input-divider-right {
+  margin: 0 0.25rem;
+  margin-top: -4px;
+}
+
+.search-history-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.search-history-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.search-history-button:hover,
+.search-history-button.active {
+  color: var(--text-primary);
 }
 
 .search-hints {

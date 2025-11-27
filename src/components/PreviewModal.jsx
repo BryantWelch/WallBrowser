@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { formatFileSize, formatRelativeDate } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
+import { useImageWithRetry } from '../hooks/useImageWithRetry';
+import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl } from '../utils/imageUtils';
 
 export function PreviewModal({ 
   wallpaper, 
@@ -19,35 +21,28 @@ export function PreviewModal({
   isLoadingPage = false
 }) {
   const { addToast } = useToast();
-  const [imageLoaded, setImageLoaded] = React.useState(false);
-  const [imageError, setImageError] = React.useState(false);
   const [tags, setTags] = React.useState([]);
   const [loadingTags, setLoadingTags] = React.useState(false);
-  const [imageUrl, setImageUrl] = React.useState('');
   const [useProxy, setUseProxy] = React.useState(true);
   const [showAllTags, setShowAllTags] = React.useState(false);
-  const [retryCount, setRetryCount] = React.useState(0);
+  const [uploaderName, setUploaderName] = React.useState(null);
+  const [uploaderAvatar, setUploaderAvatar] = React.useState(null);
   const modalRef = React.useRef(null);
   
-  // Set image URL when wallpaper changes
+  const fullImageUrl = React.useMemo(() => toProxiedFullUrl(wallpaper.url), [wallpaper.url]);
+
+  const {
+    imageUrl,
+    imageLoaded,
+    imageError,
+    handleLoad,
+    handleError,
+    reset,
+  } = useImageWithRetry(fullImageUrl, IMAGE_RETRY_CONFIG);
+
+  // Reset proxy flag when wallpaper changes
   React.useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
     setUseProxy(true);
-    
-    // Use full-size image for preview (proxied for speed)
-    let url = wallpaper.url;
-    
-    // Proxy full-size images from w.wallhaven.cc
-    if (url.includes('w.wallhaven.cc')) {
-      url = url.replace('https://w.wallhaven.cc', '/proxy/image');
-    }
-    
-    setImageUrl(url);
-    
-    // Preload current image immediately
-    const img = new Image();
-    img.src = url;
   }, [wallpaper.id, wallpaper.url]);
   
   // Fetch full wallpaper details to get tags
@@ -55,51 +50,30 @@ export function PreviewModal({
     const loadTags = async () => {
       setLoadingTags(true);
       setTags([]); // Clear previous tags
-      
-      // Retry up to 3 times with exponential backoff
-      let retries = 3;
-      let delay = 1000;
-      
-      for (let i = 0; i < retries; i++) {
-        const details = await fetchWallpaperDetails(wallpaper.id);
-        if (details && details.tags) {
-          setTags(details.tags);
-          setLoadingTags(false);
-          return;
+
+      const details = await fetchWallpaperDetails(wallpaper.id);
+      if (details && details.tags) {
+        setTags(details.tags);
+      }
+
+      // If detailed uploader info is available (with API key), use it in the modal
+      if (details && details.uploader) {
+        const name = details.uploader.username || null;
+        const avatar = details.uploader.avatar?.['128px'] || null;
+
+        if (name) {
+          setUploaderName(name);
         }
-        
-        // Wait before retry (except on last attempt)
-        if (i < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // Exponential backoff
+        if (avatar) {
+          setUploaderAvatar(avatar);
         }
       }
-      
-      // All retries failed
+
       setLoadingTags(false);
     };
-    
+
     loadTags();
   }, [wallpaper.id, fetchWallpaperDetails]);
-
-  // Handle image error with retry logic
-  const handleImageError = React.useCallback(() => {
-    if (retryCount < MAX_RETRIES) {
-      // Retry with a small delay and cache-busting parameter
-      setTimeout(() => {
-        setRetryCount(prev => prev + 1);
-        // Check if URL already has params
-        const separator = imageUrl.includes('?') ? '&' : '?';
-        // Remove existing retry param if present
-        const cleanUrl = imageUrl.replace(/[?&]retry=\d+/, '');
-        const newUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}retry=${retryCount + 1}`;
-        
-        setImageUrl(newUrl);
-      }, 250 * (retryCount + 1)); // Exponential backoff: 250ms, 500ms...
-    } else {
-      setImageError(true);
-    }
-  }, [retryCount, imageUrl]);
 
   // Focus trap and keyboard navigation
   useEffect(() => {
@@ -127,15 +101,8 @@ export function PreviewModal({
   // Handle download
   const handleDownload = async () => {
     try {
-      // Convert Wallhaven URL to use our proxy
-      let proxyUrl = wallpaper.url;
-      if (proxyUrl.includes('w.wallhaven.cc')) {
-        proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
-      } else if (proxyUrl.includes('wallhaven.cc')) {
-        proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
-      }
-      
-      const response = await fetch(proxyUrl);
+      const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -209,16 +176,33 @@ export function PreviewModal({
 
           <div 
             className="preview-image-container"
-            style={{
-              aspectRatio: `${wallpaper.width} / ${wallpaper.height}`,
-            }}
           >
             {!imageLoaded && !imageError && (
               <div className="preview-skeleton" aria-label="Loading image..." />
             )}
             {imageError && (
               <div className="preview-image-error">
-                Failed to load image. <a href={wallpaper.url} target="_blank" rel="noopener noreferrer">Open in new tab</a>
+                <p className="preview-image-error-title">
+                  Failed to load image.
+                  {' '}
+                  <a
+                    href={wallpaper.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="preview-image-error-link"
+                  >
+                    Open in new tab
+                  </a>
+                </p>
+                <div className="preview-image-error-actions">
+                  <button
+                    type="button"
+                    className="preview-action-button preview-action-retry"
+                    onClick={reset}
+                  >
+                    Retry image
+                  </button>
+                </div>
               </div>
             )}
             <img
@@ -227,8 +211,8 @@ export function PreviewModal({
               alt={wallpaper.title}
               className="preview-image"
               style={{ opacity: imageLoaded ? 1 : 0 }}
-              onLoad={() => setImageLoaded(true)}
-              onError={handleImageError}
+              onLoad={handleLoad}
+              onError={handleError}
             />
           </div>
 
@@ -395,16 +379,16 @@ export function PreviewModal({
             <div className="preview-meta-item">
               <span className="preview-meta-label">Uploader</span>
               <span className="preview-meta-value">
-                {wallpaper.authorAvatar && (
+                {(uploaderAvatar || wallpaper.authorAvatar) && (
                   <img 
-                    src={wallpaper.authorAvatar} 
-                    alt={wallpaper.author}
+                    src={uploaderAvatar || wallpaper.authorAvatar} 
+                    alt={uploaderName || wallpaper.author}
                     className="preview-author-avatar"
                   />
                 )}
-                {wallpaper.author}
+                {uploaderName || wallpaper.author}
               </span>
-              {wallpaper.author === 'Anonymous' && (
+              {(uploaderName || wallpaper.author) === 'Anonymous' && (
                 <span className="preview-meta-secondary preview-meta-hint">
                   (add API key to see)
                 </span>

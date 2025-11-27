@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { formatFileSize } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
+import { useImageWithRetry } from '../hooks/useImageWithRetry';
+import { IMAGE_RETRY_CONFIG, toProxiedDownloadUrl } from '../utils/imageUtils';
 
 export const WallpaperCard = React.memo(function WallpaperCard({ 
   wallpaper,
@@ -16,12 +18,14 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   viewMode = 'comfortable'
 }) {
   const { addToast } = useToast();
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [imageUrl, setImageUrl] = useState(wallpaper.thumbUrl);
-  
-  const MAX_RETRIES = 9;
+
+  const {
+    imageUrl,
+    imageLoaded,
+    imageError,
+    handleLoad,
+    handleError,
+  } = useImageWithRetry(wallpaper.thumbUrl, IMAGE_RETRY_CONFIG);
 
   const label = useMemo(() => `${wallpaper.width}×${wallpaper.height}`, [wallpaper.width, wallpaper.height]);
   const formattedFileSize = useMemo(() => wallpaper.fileSize > 0 ? formatFileSize(wallpaper.fileSize) : null, [wallpaper.fileSize]);
@@ -47,15 +51,8 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   const handleDownload = useCallback(async (e) => {
     e.stopPropagation();
     try {
-      // Convert Wallhaven URL to use our proxy
-      let proxyUrl = wallpaper.url;
-      if (proxyUrl.includes('w.wallhaven.cc')) {
-        proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
-      } else if (proxyUrl.includes('wallhaven.cc')) {
-        proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
-      }
-      
-      const response = await fetch(proxyUrl);
+      const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -88,47 +85,6 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     onSearchSimilar?.(wallpaper.id);
   }, [onSearchSimilar, wallpaper.id]);
 
-  const handleImageError = useCallback(() => {
-    if (retryCount < MAX_RETRIES) {
-      // Retry with a small delay and cache-busting parameter
-      setTimeout(() => {
-        setRetryCount(prev => prev + 1);
-        setImageUrl(`${wallpaper.thumbUrl}?retry=${retryCount + 1}`);
-      }, 250 * (retryCount + 1)); // Exponential backoff: 250ms, 500ms
-    } else {
-      setImageError(true);
-    }
-  }, [retryCount, wallpaper.thumbUrl]);
-
-  // Reset state when wallpaper changes
-  useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
-    setRetryCount(0);
-    setImageUrl(wallpaper.thumbUrl);
-  }, [wallpaper.thumbUrl]);
-
-  // Watchdog: if the image stays in loading state too long without load/error,
-  // force a retry so we don't get stuck on the skeleton indefinitely.
-  useEffect(() => {
-    if (imageLoaded || imageError || retryCount >= MAX_RETRIES) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      setRetryCount((prev) => {
-        const next = prev + 1;
-        if (next > MAX_RETRIES) {
-          setImageError(true);
-          return prev;
-        }
-        setImageUrl(`${wallpaper.thumbUrl}?retry=${next}`);
-        return next;
-      });
-    }, 1000);
-
-    return () => clearTimeout(timeoutId);
-  }, [imageLoaded, imageError, retryCount, wallpaper.thumbUrl, MAX_RETRIES]);
 
   return (
     <article
@@ -191,8 +147,8 @@ export const WallpaperCard = React.memo(function WallpaperCard({
             src={imageUrl}
             alt={wallpaper.title}
             style={{ opacity: imageLoaded ? 1 : 0 }}
-            onLoad={() => setImageLoaded(true)}
-            onError={handleImageError}
+            onLoad={handleLoad}
+            onError={handleError}
           />
         )}
       </button>

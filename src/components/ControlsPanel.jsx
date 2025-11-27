@@ -185,16 +185,84 @@ export function ControlsPanel({
               onKeyPress={handleSearchKeyPress}
               aria-label="Search wallpapers"
             />
-            {filters.query && (
+            <div className="search-input-suffix">
+              {filters.query && (
+                <button
+                  type="button"
+                  className="search-clear-button"
+                  onClick={() => onFilterChange('query', '')}
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+              <span className="search-input-divider search-input-divider-right">|</span>
               <button
+                ref={historyButtonRef}
                 type="button"
-                className="search-clear-button"
-                onClick={() => onFilterChange('query', '')}
-                title="Clear search"
-                aria-label="Clear search"
+                className={`search-history-button ${showHistory ? 'active' : ''}`}
+                onClick={() => setShowHistory(!showHistory)}
+                title="Search history"
+                aria-label="Search history"
+                aria-expanded={showHistory}
               >
-                ×
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
               </button>
+            </div>
+            {showHistory && (
+              <div className="history-dropdown" ref={historyRef}>
+                <div className="history-header">
+                  <span>Recent Searches</span>
+                  {searchHistory.length > 0 && (
+                    <button
+                      type="button"
+                      className="history-clear-all"
+                      onClick={() => {
+                        onClearHistory?.();
+                        setShowHistory(false);
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                {searchHistory.length === 0 ? (
+                  <div className="history-empty">
+                    <span>No recent searches</span>
+                  </div>
+                ) : (
+                  <ul className="history-list">
+                    {searchHistory.map((entry) => (
+                      <li key={entry.id} className="history-item">
+                        <button
+                          type="button"
+                          className="history-item-button"
+                          onClick={() => handleSelectHistory(entry)}
+                        >
+                          <span className="history-item-summary">{entry.summary}</span>
+                          <span className="history-item-time">{formatHistoryTime(entry.timestamp)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="history-item-remove"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveHistory?.(entry.id);
+                          }}
+                          title="Remove from history"
+                          aria-label="Remove from history"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
           {showSearchHints && (
@@ -208,78 +276,6 @@ export function ControlsPanel({
                 <li><code>like:8ggez2</code> - similar wallpapers</li>
               </ul>
               <small>Example: <code>+cyberpunk +neon -cars @Leonid428</code></small>
-            </div>
-          )}
-        </div>
-        
-        {/* History button */}
-        <div className="control-item control-item-history">
-          <button
-            ref={historyButtonRef}
-            type="button"
-            className={`history-button ${showHistory ? 'active' : ''}`}
-            onClick={() => setShowHistory(!showHistory)}
-            title="Search history"
-            aria-label="Search history"
-            aria-expanded={showHistory}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            <span>History</span>
-          </button>
-          
-          {showHistory && (
-            <div className="history-dropdown" ref={historyRef}>
-              <div className="history-header">
-                <span>Recent Searches</span>
-                {searchHistory.length > 0 && (
-                  <button
-                    type="button"
-                    className="history-clear-all"
-                    onClick={() => {
-                      onClearHistory?.();
-                      setShowHistory(false);
-                    }}
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-              
-              {searchHistory.length === 0 ? (
-                <div className="history-empty">
-                  <span>No recent searches</span>
-                </div>
-              ) : (
-                <ul className="history-list">
-                  {searchHistory.map((entry) => (
-                    <li key={entry.id} className="history-item">
-                      <button
-                        type="button"
-                        className="history-item-button"
-                        onClick={() => handleSelectHistory(entry)}
-                      >
-                        <span className="history-item-summary">{entry.summary}</span>
-                        <span className="history-item-time">{formatHistoryTime(entry.timestamp)}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="history-item-remove"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveHistory?.(entry.id);
-                        }}
-                        title="Remove from history"
-                        aria-label="Remove from history"
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           )}
         </div>

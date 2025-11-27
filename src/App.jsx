@@ -15,6 +15,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
 import { clearCache } from './utils';
+import { prefetchImage, toProxiedFullUrl, toProxiedDownloadUrl } from './utils/imageUtils';
 import { getStoredApiKey } from './utils/apiKeyStorage';
 import { ToastContainer } from './components/Toast';
 import { useToast } from './context/ToastContext';
@@ -236,25 +237,13 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
   
-  // Preload current page full images and prefetch adjacent pages
+  // Prefetch next page thumbnails (full-size images are loaded on demand in preview)
   useEffect(() => {
     if (wallpapers.length > 0 && totalPages && !isLoading) {
-      // Small delay to avoid blocking the main page render
       const timer = setTimeout(() => {
-        // Preload full-size images for current page (thumbnails already loaded by grid)
-        wallpapers.forEach(wallpaper => {
-          const full = new Image();
-          if (wallpaper.url.includes('w.wallhaven.cc')) {
-            full.src = wallpaper.url.replace('https://w.wallhaven.cc', '/proxy/image');
-          } else {
-            full.src = wallpaper.url;
-          }
-        });
-        
-        // Prefetch adjacent pages (thumbnails + full images)
         prefetchPages(filters, page, totalPages);
       }, 100);
-      
+
       return () => clearTimeout(timer);
     }
   }, [wallpapers, page, totalPages, filters, isLoading, prefetchPages]);
@@ -376,15 +365,8 @@ function App() {
         
         setDownloadStatus('downloading');
         
-        // Use proxy for download
-        let proxyUrl = wallpaper.url;
-        if (proxyUrl.includes('w.wallhaven.cc')) {
-          proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
-        } else if (proxyUrl.includes('wallhaven.cc')) {
-          proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
-        }
-        
-        const response = await fetch(proxyUrl);
+        const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
+        const response = await fetch(downloadUrl);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         const blob = await response.blob();
@@ -415,15 +397,8 @@ function App() {
       // Fetch and add files to ZIP
       await Promise.all(selected.map(async (wallpaper, index) => {
         try {
-          // Convert Wallhaven URL to use our proxy
-          let proxyUrl = wallpaper.url;
-          if (proxyUrl.includes('w.wallhaven.cc')) {
-            proxyUrl = proxyUrl.replace('https://w.wallhaven.cc', '/proxy/image');
-          } else if (proxyUrl.includes('wallhaven.cc')) {
-            proxyUrl = proxyUrl.replace('https://wallhaven.cc', '/proxy/image');
-          }
-          
-          const response = await fetch(proxyUrl);
+          const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
+          const response = await fetch(downloadUrl);
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
@@ -563,6 +538,24 @@ function App() {
   const previewIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
   const hasNextPreview = previewIndex < wallpapers.length - 1 || (canGoNext && !showOnlySelected && !showOnlyFavorites);
   const hasPreviousPreview = previewIndex > 0 || (canGoPrevious && !showOnlySelected && !showOnlyFavorites);
+
+  // While preview is open, prefetch the next full image within the current page
+  // so navigation feels snappier without globally preloading all full images.
+  useEffect(() => {
+    if (!previewWallpaper) return;
+
+    const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper.id);
+    if (currentIndex === -1) return;
+
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < wallpapers.length) {
+      const nextWallpaper = wallpapers[nextIndex];
+      if (nextWallpaper && nextWallpaper.url) {
+        const url = toProxiedFullUrl(nextWallpaper.url);
+        prefetchImage(url);
+      }
+    }
+  }, [previewWallpaper, wallpapers]);
   
   // Keyboard shortcuts
   useKeyboardShortcuts({
