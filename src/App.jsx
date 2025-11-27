@@ -211,10 +211,27 @@ function App() {
     if (!filtersRef.current || !filtersRef.current.categories) {
       return;
     }
-    
-    // Scroll to top smoothly
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    
+
+    // Scroll behavior on page change:
+    // - Desktop: scroll to very top (search + filters)
+    // - Mobile: scroll to the pagination bar instead of all the way to the top
+    try {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        const paginationEl = document.querySelector('.pagination-bar');
+        if (paginationEl && typeof paginationEl.scrollIntoView === 'function') {
+          paginationEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (e) {
+      // Fallback in case of any runtime issues
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     fetchWallpapers(filtersRef.current, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);

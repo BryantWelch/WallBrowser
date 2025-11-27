@@ -108,6 +108,28 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     setImageUrl(wallpaper.thumbUrl);
   }, [wallpaper.thumbUrl]);
 
+  // Watchdog: if the image stays in loading state too long without load/error,
+  // force a retry so we don't get stuck on the skeleton indefinitely.
+  useEffect(() => {
+    if (imageLoaded || imageError || retryCount >= MAX_RETRIES) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setRetryCount((prev) => {
+        const next = prev + 1;
+        if (next > MAX_RETRIES) {
+          setImageError(true);
+          return prev;
+        }
+        setImageUrl(`${wallpaper.thumbUrl}?retry=${next}`);
+        return next;
+      });
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [imageLoaded, imageError, retryCount, wallpaper.thumbUrl, MAX_RETRIES]);
+
   return (
     <article
       className={`wallpaper-card wallpaper-card-${viewMode} ${
@@ -168,7 +190,6 @@ export const WallpaperCard = React.memo(function WallpaperCard({
             className="wallpaper-thumbnail"
             src={imageUrl}
             alt={wallpaper.title}
-            loading="lazy"
             style={{ opacity: imageLoaded ? 1 : 0 }}
             onLoad={() => setImageLoaded(true)}
             onError={handleImageError}
