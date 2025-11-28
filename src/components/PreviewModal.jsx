@@ -187,6 +187,7 @@ export function PreviewModal({
 
           <div 
             className="preview-image-container"
+            style={wallpaper.width && wallpaper.height ? { aspectRatio: `${wallpaper.width} / ${wallpaper.height}` } : undefined}
           >
             {!imageLoaded && !imageError && (
               <div className="preview-skeleton" aria-label="Loading image..." />
