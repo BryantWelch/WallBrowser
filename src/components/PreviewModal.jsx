@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { formatFileSize, formatRelativeDate } from '../utils';
+import { formatFileSize, formatRelativeDate, getFavoriteToast } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
-import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl } from '../utils/imageUtils';
+import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl, downloadWallpaperBlob } from '../utils/imageUtils';
 
 export function PreviewModal({ 
   wallpaper, 
@@ -112,13 +112,7 @@ export function PreviewModal({
   // Handle download
   const handleDownload = async () => {
     try {
-      const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
-      const response = await fetch(downloadUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const blob = await response.blob();
-      const ext = wallpaper.url.split('.').pop() || 'jpg';
+      const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
       
       // Create download link
       const blobUrl = URL.createObjectURL(blob);
@@ -140,11 +134,8 @@ export function PreviewModal({
   // Handle favorite toggle with toast
   const handleFavoriteClick = () => {
     onToggleFavorite(wallpaper);
-    if (!isFavorite) {
-      addToast('Added to favorites', 'success', 2000);
-    } else {
-      addToast('Removed from favorites', 'info', 2000);
-    }
+    const { message, type } = getFavoriteToast(isFavorite);
+    addToast(message, type, 2000);
   };
 
   if (!wallpaper) return null;

@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { formatFileSize } from '../utils';
-import { getColorName } from '../constants';
+import { formatFileSize, getFavoriteToast } from '../utils';
+import { getColorName, VIEW_MODES } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
-import { IMAGE_RETRY_CONFIG, toProxiedDownloadUrl } from '../utils/imageUtils';
+import { IMAGE_RETRY_CONFIG, downloadWallpaperBlob } from '../utils/imageUtils';
 
 export const WallpaperCard = React.memo(function WallpaperCard({ 
   wallpaper,
@@ -15,7 +15,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   onClick,
   onColorClick,
   onSearchSimilar,
-  viewMode = 'comfortable'
+  viewMode = VIEW_MODES.COMFORTABLE
 }) {
   const { addToast } = useToast();
 
@@ -41,23 +41,14 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   const handleFavorite = useCallback((e) => {
     e.stopPropagation();
     onToggleFavorite(wallpaper);
-    if (!isFavorite) {
-      addToast('Added to favorites', 'success', 2000);
-    } else {
-      addToast('Removed from favorites', 'info', 2000);
-    }
+    const { message, type } = getFavoriteToast(isFavorite);
+    addToast(message, type, 2000);
   }, [onToggleFavorite, wallpaper, isFavorite, addToast]);
 
   const handleDownload = useCallback(async (e) => {
     e.stopPropagation();
     try {
-      const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
-      const response = await fetch(downloadUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const blob = await response.blob();
-      const ext = wallpaper.url.split('.').pop() || 'jpg';
+      const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
       
       // Create download link
       const blobUrl = URL.createObjectURL(blob);

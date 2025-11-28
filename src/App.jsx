@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import JSZip from 'jszip';
 import { ControlsPanel } from './components/ControlsPanel';
 import { WallpaperGrid } from './components/WallpaperGrid';
 import { PaginationBar } from './components/PaginationBar';
@@ -14,8 +13,8 @@ import { useFavorites } from './hooks/useFavorites';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
-import { clearCache } from './utils';
-import { prefetchImage, toProxiedFullUrl, toProxiedDownloadUrl } from './utils/imageUtils';
+import { clearCache, buildSimilarFilters } from './utils';
+import { prefetchImage, toProxiedFullUrl, downloadWallpaperBlob, createWallpapersZip } from './utils/imageUtils';
 import { getStoredApiKey } from './utils/apiKeyStorage';
 import { ToastContainer } from './components/Toast';
 import { useToast } from './context/ToastContext';
@@ -100,6 +99,14 @@ function App() {
 
   // Download status state
   const [downloadStatus, setDownloadStatus] = useState('idle'); // 'idle', 'downloading', 'zipping', 'success', 'error'
+
+  const getDownloadButtonLabel = useCallback((status, count) => {
+    if (status === 'downloading') return '⏳ Downloading...';
+    if (status === 'zipping') return '⏳ Creating ZIP...';
+    if (status === 'success') return '✓ Downloaded';
+    if (status === 'error') return '✕ Failed';
+    return `Download selected (${count})`;
+  }, []);
   
   // Track last clicked index for shift-click range selection
   const lastClickedIndexRef = useRef(null);
@@ -137,10 +144,7 @@ function App() {
 
   // Handle search for similar wallpapers
   const handleSearchSimilar = useCallback(async (wallpaperId) => {
-    const newFilters = {
-      ...filters,
-      query: `like:${wallpaperId}`
-    };
+    const newFilters = buildSimilarFilters(filters, wallpaperId);
     setFilters(newFilters);
     resetPage();
     // Clear selections when starting a new search
@@ -365,12 +369,7 @@ function App() {
         
         setDownloadStatus('downloading');
         
-        const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
-        const response = await fetch(downloadUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const blob = await response.blob();
-        const ext = wallpaper.url.split('.').pop() || 'jpg';
+        const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
         const blobUrl = URL.createObjectURL(blob);
         
         const link = document.createElement('a');
@@ -387,35 +386,11 @@ function App() {
         return;
       }
       
-      // Multiple files - create ZIP
-      const zip = new JSZip();
-      const folder = zip.folder('wallpapers');
-      
+      // Multiple files - create ZIP via shared helper
       setDownloadStatus('zipping');
       addToast(`Preparing ZIP for ${selected.length} wallpapers...`, 'loading', 3000);
-      
-      // Fetch and add files to ZIP
-      await Promise.all(selected.map(async (wallpaper, index) => {
-        try {
-          const downloadUrl = toProxiedDownloadUrl(wallpaper.url);
-          const response = await fetch(downloadUrl);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const blob = await response.blob();
-          const ext = wallpaper.url.split('.').pop() || 'jpg';
-          folder.file(`wallpaper-${wallpaper.id}.${ext}`, blob);
-        } catch (err) {
-          console.error(`Failed to download ${wallpaper.id}:`, err);
-        }
-      }));
-      
-      // Generate and download ZIP
-      const content = await zip.generateAsync({ 
-        type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
-      });
+
+      const content = await createWallpapersZip(selected);
       
       const blobUrl = URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -758,11 +733,7 @@ function App() {
                   aria-label={`Download ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''}`}
                   title={`Download ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''}`}
                 >
-                  {downloadStatus === 'downloading' && '⏳ Downloading...'}
-                  {downloadStatus === 'zipping' && '⏳ Creating ZIP...'}
-                  {downloadStatus === 'success' && '✓ Downloaded'}
-                  {downloadStatus === 'error' && '✕ Failed'}
-                  {downloadStatus === 'idle' && `Download selected (${selectedCount})`}
+                  {getDownloadButtonLabel(downloadStatus, selectedCount)}
                 </button>
               </div>
             </div>

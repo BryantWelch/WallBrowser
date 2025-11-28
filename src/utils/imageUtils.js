@@ -1,7 +1,70 @@
+import JSZip from 'jszip';
+
 export function prefetchImage(url) {
   if (!url) return;
   const img = new Image();
   img.src = url;
+}
+
+export async function downloadWallpaperBlob(url) {
+  if (!url) {
+    throw new Error('Missing wallpaper URL');
+  }
+  
+  const downloadUrl = toProxiedDownloadUrl(url);
+
+  let lastError;
+  const maxRetries = 3;
+  const baseDelay = 400;
+
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    try {
+      const response = await fetch(downloadUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const ext = url.split('.').pop() || 'jpg';
+
+      return { blob, ext };
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * (attempt + 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to download wallpaper');
+}
+
+export async function createWallpapersZip(wallpapers) {
+  if (!wallpapers || wallpapers.length === 0) {
+    throw new Error('No wallpapers to zip');
+  }
+
+  const zip = new JSZip();
+  const folder = zip.folder('wallpapers');
+
+  await Promise.all(wallpapers.map(async (wallpaper) => {
+    try {
+      const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
+      folder.file(`wallpaper-${wallpaper.id}.${ext}`, blob);
+    } catch (err) {
+      console.error(`Failed to download ${wallpaper.id}:`, err);
+    }
+  }));
+
+  const content = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+
+  return content;
 }
 
 export function toProxiedFullUrl(url) {
