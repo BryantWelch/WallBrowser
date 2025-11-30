@@ -697,6 +697,35 @@ body {
   cursor: default;
 }
 
+/* Unfavorite button: keep pill sizing, just tint colors slightly red */
+.secondary-button.unfavorite-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-color: rgba(239, 68, 68, 0.7);
+  background: rgba(127, 29, 29, 0.16);
+  color: #fecaca;
+}
+
+.secondary-button.unfavorite-button:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.26);
+  border-color: rgba(239, 68, 68, 0.9);
+  color: #fee2e2;
+}
+
+.secondary-button.unfavorite-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(75, 85, 99, 0.9);
+  color: var(--text-muted);
+}
+
+.unfavorite-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 .grid-section {
   margin-top: 0.5rem;
 }
@@ -760,6 +789,15 @@ body {
 .show-selected-button:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.show-selected-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+  background: transparent;
+  border-color: rgba(75, 85, 99, 0.7);
+  color: var(--text-muted);
+  box-shadow: none;
 }
 
 .show-selected-button.active {
@@ -1248,6 +1286,25 @@ body {
   color: var(--text-primary);
 }
 
+.wallpaper-download-toggle.wallpaper-download-downloaded {
+  border: none;
+  box-shadow: none;
+}
+
+.wallpaper-download-toggle.wallpaper-download-downloaded .action-icon-small {
+  color: #22c55e;
+}
+
+.preview-action-button.preview-action-download.preview-download-downloaded {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.65);
+}
+
+.preview-action-button.preview-action-download.preview-download-downloaded svg.action-icon {
+  color: #22c55e;
+  stroke: #22c55e;
+}
+
 .heart {
   font-size: 1.5rem;
   color: #94a3b8;
@@ -1340,9 +1397,19 @@ body {
   gap: 0.6rem;
 }
 
+.wallpaper-grid-cramped {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
 .wallpaper-grid-cozy {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.2rem;
+}
+
+.wallpaper-grid-cinematic {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.3rem;
 }
 
 .wallpaper-card-compact .wallpaper-meta {
@@ -1363,6 +1430,16 @@ body {
   height: 1.1rem;
 }
 
+/* Even smaller color swatches in cramped view to keep them on one line */
+.wallpaper-card-cramped .wallpaper-color-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.wallpaper-card-cramped .wallpaper-colors {
+  gap: 0.25rem;
+}
+
 .wallpaper-card-cozy .wallpaper-meta {
   padding: 0.8rem 0.9rem;
 }
@@ -1373,6 +1450,61 @@ body {
 
 .wallpaper-card-cozy .wallpaper-submeta {
   font-size: 0.8rem;
+}
+
+/* Responsive tweaks for mobile
+   - Portrait: force single-column to avoid overflow in wide modes
+   - Landscape: allow multiple columns again
+   - Make compact/cramped swatches a bit larger on small screens. */
+
+/* Portrait phones/tablets: single column */
+@media (max-width: 768px) and (orientation: portrait) {
+  .wallpaper-grid,
+  .wallpaper-grid-compact,
+  .wallpaper-grid-cramped,
+  .wallpaper-grid-cozy,
+  .wallpaper-grid-cinematic {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.8rem;
+  }
+}
+
+/* Small landscape devices: let the existing view-mode-specific
+   grid templates apply so you can get 2–3 across again. */
+@media (max-width: 900px) and (orientation: landscape) {
+  .wallpaper-grid {
+    gap: 0.7rem;
+  }
+}
+
+/* On small screens, bump compact/cramped swatch size for legibility */
+@media (max-width: 768px) {
+  .wallpaper-card-cramped .wallpaper-color-swatch,
+  .wallpaper-card-compact .wallpaper-color-swatch {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .wallpaper-card-cramped .wallpaper-colors,
+  .wallpaper-card-compact .wallpaper-colors {
+    gap: 0.25rem;
+  }
+}
+
+.wallpaper-card-cinematic .wallpaper-meta {
+  padding: 0.9rem 1rem;
+}
+
+.wallpaper-card-cinematic .wallpaper-title {
+  font-size: 1rem;
+}
+
+.wallpaper-card-cramped .wallpaper-meta {
+  padding: 0.35rem 0.45rem;
+}
+
+.wallpaper-card-cramped .wallpaper-title {
+  font-size: 0.7rem;
 }
 
 /* Preview Modal */

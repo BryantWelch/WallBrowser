@@ -5,11 +5,14 @@ export function WallpaperGrid({
   wallpapers, 
   selectedIds, 
   favorites,
+  downloadedIds,
   onToggleSelect,
   onToggleFavorite,
   onWallpaperClick,
   onColorClick,
   onSearchSimilar,
+  isDownloaded,
+  onMarkDownloaded,
   viewMode = 'comfortable',
   isLoading
 }) {
@@ -39,8 +42,10 @@ export function WallpaperGrid({
           index={index}
           isSelected={selectedIds.has(wallpaper.id)}
           isFavorite={favorites.some((fav) => fav.id === wallpaper.id)}
+          isDownloaded={isDownloaded ? isDownloaded(wallpaper.id) : downloadedIds?.includes(wallpaper.id)}
           onToggleSelect={onToggleSelect}
           onToggleFavorite={onToggleFavorite}
+          onMarkDownloaded={onMarkDownloaded}
           onClick={onWallpaperClick}
           onColorClick={onColorClick}
           onSearchSimilar={onSearchSimilar}

@@ -10,6 +10,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useWallhavenAPI } from './hooks/useWallhavenAPI';
 import { usePagination } from './hooks/usePagination';
 import { useFavorites } from './hooks/useFavorites';
+import { useDownloadedWallpapers } from './hooks/useDownloadedWallpapers';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
@@ -71,7 +72,10 @@ function App() {
   const [selectedWallpapers, setSelectedWallpapers] = useState(new Map()); // Map<id, wallpaper>
   
   // Favorites management
-  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const { favorites, toggleFavorite, isFavorite, removeFavorite, removeManyFavorites } = useFavorites();
+
+  // Downloaded wallpapers tracking (per-device)
+  const { downloadedIds, markDownloaded, isDownloaded, removeDownloaded } = useDownloadedWallpapers();
   
   // Search history management
   const { history: searchHistory, addToHistory, removeFromHistory, clearHistory } = useSearchHistory();
@@ -86,6 +90,10 @@ function App() {
   // Show only favorites toggle
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [pageBeforeShowingFavorites, setPageBeforeShowingFavorites] = useState(1);
+
+  // Show only downloaded wallpapers toggle
+  const [showOnlyDownloaded, setShowOnlyDownloaded] = useState(false);
+  const [pageBeforeShowingDownloaded, setPageBeforeShowingDownloaded] = useState(1);
   
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -257,6 +265,8 @@ function App() {
     ? Array.from(selectedWallpapers.values())
     : showOnlyFavorites
     ? favorites
+    : showOnlyDownloaded
+    ? wallpapers.filter(w => isDownloaded(w.id))
     : wallpapers;
   
   // Toggle selection (with shift-click range selection support)
@@ -282,6 +292,7 @@ function App() {
       });
     } else {
       // Normal toggle
+      let nextSizeAfterToggle = null;
       setSelectedIds(prev => {
         const next = new Set(prev);
         if (next.has(id)) {
@@ -304,19 +315,28 @@ function App() {
             });
           }
         }
+        nextSizeAfterToggle = next.size;
         return next;
       });
     }
     
+    // If we're in show-selected view and the last item was just deselected, exit back to main view
+    if (showOnlySelected && selectedIds.size && selectedIds.size === 1) {
+      // After this toggle, there will be 0 selected
+      setShowOnlySelected(false);
+      goToPage(pageBeforeShowingSelected);
+    }
+
     // Update last clicked index
     if (index !== null) {
       lastClickedIndexRef.current = index;
     }
-  }, [displayedWallpapers]);
+  }, [displayedWallpapers, showOnlySelected, selectedIds, pageBeforeShowingSelected, goToPage]);
   
-  // Select all visible (current page only)
+  // Select all visible (current page only, or all visible in favorites/downloaded views)
   const selectAllVisible = useCallback(() => {
-    const currentPageIds = wallpapers.map(w => w.id);
+    const sourceList = (showOnlyFavorites || showOnlyDownloaded) ? displayedWallpapers : wallpapers;
+    const currentPageIds = sourceList.map(w => w.id);
     
     // Select all on current page
     setSelectedIds(prev => {
@@ -326,10 +346,10 @@ function App() {
     });
     setSelectedWallpapers(prevMap => {
       const nextMap = new Map(prevMap);
-      wallpapers.forEach(w => nextMap.set(w.id, w));
+      sourceList.forEach(w => nextMap.set(w.id, w));
       return nextMap;
     });
-  }, [wallpapers]);
+  }, [wallpapers, displayedWallpapers, showOnlyFavorites, showOnlyDownloaded]);
 
   // Deselect all visible (current page only, or all if in show-selected mode)
   const deselectAllVisible = useCallback(() => {
@@ -340,8 +360,9 @@ function App() {
       setShowOnlySelected(false);
       goToPage(pageBeforeShowingSelected);
     } else {
-      // Normal mode: deselect only current page
-      const currentPageIds = wallpapers.map(w => w.id);
+      // Normal mode: deselect only current page (or all visible in favorites/downloaded views)
+      const sourceList = (showOnlyFavorites || showOnlyDownloaded) ? displayedWallpapers : wallpapers;
+      const currentPageIds = sourceList.map(w => w.id);
       
       setSelectedIds(prev => {
         const next = new Set(prev);
@@ -354,7 +375,74 @@ function App() {
         return nextMap;
       });
     }
-  }, [wallpapers, showOnlySelected, pageBeforeShowingSelected, goToPage]);
+  }, [wallpapers, displayedWallpapers, showOnlySelected, showOnlyFavorites, showOnlyDownloaded, pageBeforeShowingSelected, goToPage]);
+
+  // Bulk remove selected items from downloaded history (primarily used in downloaded view)
+  const handleRemoveDownloadedSelected = useCallback(() => {
+    if (!selectedIds.size) return;
+
+    const idsToRemove = downloadedIds.filter(id => selectedIds.has(id));
+    if (!idsToRemove.length) return;
+
+    removeDownloaded(idsToRemove);
+
+    // Clear those ids from selection state
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      idsToRemove.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    setSelectedWallpapers((prevMap) => {
+      const nextMap = new Map(prevMap);
+      idsToRemove.forEach((id) => nextMap.delete(id));
+      return nextMap;
+    });
+
+    // Toast feedback
+    addToast(
+      idsToRemove.length === 1
+        ? 'Removed 1 wallpaper from download history.'
+        : `Removed ${idsToRemove.length} wallpapers from download history.`,
+      'success'
+    );
+  }, [selectedIds, downloadedIds, removeDownloaded, addToast]);
+
+  // Bulk unfavorite selected wallpapers (primarily used in favorites view)
+  const handleUnfavoriteSelected = useCallback(() => {
+    if (!selectedIds.size) return;
+
+    // Only operate on favorites that are actually selected, to avoid any stale ids
+    const idsToUnfavorite = favorites
+      .filter((fav) => selectedIds.has(fav.id))
+      .map((fav) => fav.id);
+
+    if (!idsToUnfavorite.length) return;
+
+    // Bulk-remove in a single update to avoid intermediate state issues
+    removeManyFavorites(idsToUnfavorite);
+
+    // Clear those ids from selection state
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      idsToUnfavorite.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    setSelectedWallpapers((prevMap) => {
+      const nextMap = new Map(prevMap);
+      idsToUnfavorite.forEach((id) => nextMap.delete(id));
+      return nextMap;
+    });
+
+    // Toast feedback
+    addToast(
+      idsToUnfavorite.length === 1
+        ? 'Removed 1 favorite.'
+        : `Removed ${idsToUnfavorite.length} favorites.`,
+      'success'
+    );
+  }, [selectedIds, favorites, removeManyFavorites, addToast]);
   
   // Download selected with ZIP
   const handleDownloadSelected = useCallback(async () => {
@@ -380,8 +468,13 @@ function App() {
         document.body.removeChild(link);
         URL.revokeObjectURL(blobUrl);
         
+        // Mark as downloaded
+        markDownloaded(wallpaper.id);
+
         setDownloadStatus('success');
         addToast('Download complete!', 'success');
+        setSelectedIds(new Set());
+        setSelectedWallpapers(new Map());
         setTimeout(() => setDownloadStatus('idle'), 2000);
         return;
       }
@@ -401,8 +494,13 @@ function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
+      // Mark all selected wallpapers as downloaded
+      markDownloaded(selected.map((w) => w.id));
+
       setDownloadStatus('success');
       addToast('ZIP download ready!', 'success');
+      setSelectedIds(new Set());
+      setSelectedWallpapers(new Map());
       setTimeout(() => setDownloadStatus('idle'), 2000);
       
     } catch (err) {
@@ -411,7 +509,7 @@ function App() {
       addToast('Download failed. Please try again.', 'error');
       setTimeout(() => setDownloadStatus('idle'), 2000);
     }
-  }, [selectedWallpapers, addToast]);
+  }, [selectedWallpapers, addToast, markDownloaded]);
   
   // Preview navigation
   const handleWallpaperClick = useCallback((wallpaper) => {
@@ -567,8 +665,11 @@ function App() {
         // Entering show-selected mode: save current page and exit favorites mode
         setPageBeforeShowingSelected(page);
         setShowOnlyFavorites(false);
+        setShowOnlyDownloaded(false);
       } else {
-        // Exiting show-selected mode: return to saved page
+        // Exiting show-selected mode: clear selections and return to saved page
+        setSelectedIds(new Set());
+        setSelectedWallpapers(new Map());
         goToPage(pageBeforeShowingSelected);
       }
       return !prev;
@@ -582,13 +683,54 @@ function App() {
         // Entering favorites mode: save current page and exit selected mode
         setPageBeforeShowingFavorites(page);
         setShowOnlySelected(false);
+        setShowOnlyDownloaded(false);
       } else {
-        // Exiting favorites mode: return to saved page
+        // Exiting favorites mode: clear selections made in favorites view and return to saved page
+        setSelectedIds(new Set());
+        setSelectedWallpapers(new Map());
         goToPage(pageBeforeShowingFavorites);
       }
       return !prev;
     });
   }, [page, pageBeforeShowingFavorites, goToPage]);
+
+  // Auto-exit favorites view if no favorites remain
+  useEffect(() => {
+    if (showOnlyFavorites && favorites.length === 0) {
+      setSelectedIds(new Set());
+      setSelectedWallpapers(new Map());
+      setShowOnlyFavorites(false);
+      goToPage(pageBeforeShowingFavorites);
+    }
+  }, [showOnlyFavorites, favorites, pageBeforeShowingFavorites, goToPage]);
+
+  // Toggle showing only downloaded wallpapers
+  const toggleShowOnlyDownloaded = useCallback(() => {
+    setShowOnlyDownloaded(prev => {
+      if (!prev) {
+        // Entering downloaded mode: save current page and exit other modes
+        setPageBeforeShowingDownloaded(page);
+        setShowOnlySelected(false);
+        setShowOnlyFavorites(false);
+      } else {
+        // Exiting downloaded mode: clear selections made in downloaded view and return to saved page
+        setSelectedIds(new Set());
+        setSelectedWallpapers(new Map());
+        goToPage(pageBeforeShowingDownloaded);
+      }
+      return !prev;
+    });
+  }, [page, pageBeforeShowingDownloaded, goToPage]);
+
+  // Auto-exit downloaded view if no downloaded items remain
+  useEffect(() => {
+    if (showOnlyDownloaded && downloadedIds.length === 0) {
+      setSelectedIds(new Set());
+      setSelectedWallpapers(new Map());
+      setShowOnlyDownloaded(false);
+      goToPage(pageBeforeShowingDownloaded);
+    }
+  }, [showOnlyDownloaded, downloadedIds, pageBeforeShowingDownloaded, goToPage]);
   
   return (
     <div className="app-root">
@@ -651,9 +793,9 @@ function App() {
           onPageChange={goToPage}
           onPrevious={goToPreviousPage}
           onNext={goToNextPage}
-          isLoading={isLoading || showOnlySelected || showOnlyFavorites}
-          canGoNext={canGoNext && !showOnlySelected && !showOnlyFavorites}
-          canGoPrevious={canGoPrevious && !showOnlySelected && !showOnlyFavorites}
+          isLoading={isLoading || showOnlySelected || showOnlyFavorites || showOnlyDownloaded}
+          canGoNext={canGoNext && !showOnlySelected && !showOnlyFavorites && !showOnlyDownloaded}
+          canGoPrevious={canGoPrevious && !showOnlySelected && !showOnlyFavorites && !showOnlyDownloaded}
         />
 
         <section className="grid-section">
@@ -665,41 +807,53 @@ function App() {
                     ? `${displayedWallpapers.length} selected` 
                     : showOnlyFavorites
                     ? `${displayedWallpapers.length} favorites`
+                    : showOnlyDownloaded
+                    ? `${displayedWallpapers.length} downloaded`
                     : `${wallpapers.length} wallpapers`}
                 </span>
-                {!showOnlySelected && !showOnlyFavorites && (
-                  <>
-                    <span className="results-separator">·</span>
-                    <span className="results-selected">
-                      {selectedCount} selected
-                    </span>
-                  </>
-                )}
-                {selectedCount > 0 && !showOnlyFavorites && (
+                {!showOnlyFavorites && !showOnlyDownloaded && (
                   <button
                     type="button"
                     className="show-selected-button"
                     onClick={toggleShowOnlySelected}
+                    disabled={!showOnlySelected && selectedCount === 0}
                     title={showOnlySelected ? "Show all wallpapers" : "Show only selected wallpapers"}
                     aria-label={showOnlySelected ? "Show all wallpapers" : "Show only selected wallpapers"}
                   >
-                    {showOnlySelected ? '← Back to all' : 'Show selected →'}
+                    {showOnlySelected 
+                      ? `Back to all (${selectedCount})` 
+                      : `Selected (${selectedCount})`}
                   </button>
                 )}
-                {(favorites.length > 0 || showOnlyFavorites) && !showOnlySelected && (
+                {!showOnlySelected && !showOnlyDownloaded && (
                   <button
                     type="button"
                     className="show-selected-button"
                     onClick={toggleShowOnlyFavorites}
+                    disabled={!showOnlyFavorites && favorites.length === 0}
                     title={showOnlyFavorites ? "Return to browsing" : `View your ${favorites.length} favorites`}
                     aria-label={showOnlyFavorites ? "Return to browsing" : `View ${favorites.length} favorites`}
                   >
-                    {showOnlyFavorites ? '← Back to all' : `♥ View favorites (${favorites.length}) →`}
+                    {showOnlyFavorites ? 'Back to all' : `Favorites (${favorites.length})`}
+                  </button>
+                )}
+                {!showOnlySelected && !showOnlyFavorites && (
+                  <button
+                    type="button"
+                    className="show-selected-button"
+                    onClick={toggleShowOnlyDownloaded}
+                    disabled={!showOnlyDownloaded && downloadedIds.length === 0}
+                    title={showOnlyDownloaded ? "Return to browsing" : `View your ${downloadedIds.length} downloaded wallpapers`}
+                    aria-label={showOnlyDownloaded ? "Return to browsing" : `View ${downloadedIds.length} downloaded wallpapers`}
+                  >
+                    {showOnlyDownloaded 
+                      ? 'Back to all' 
+                      : `Downloaded (${downloadedIds.length})`}
                   </button>
                 )}
               </div>
               <div className="results-actions">
-                {!showOnlySelected && !showOnlyFavorites && (
+                {!showOnlySelected && (
                   <button
                     type="button"
                     className="secondary-button select-button"
@@ -712,16 +866,51 @@ function App() {
                   </button>
                 )}
 
-                {!showOnlyFavorites && (
+                <button
+                  type="button"
+                  className="secondary-button deselect-button"
+                  onClick={deselectAllVisible}
+                  disabled={
+                    !displayedWallpapers.length ||
+                    (!showOnlySelected && !showOnlyFavorites && !showOnlyDownloaded && !selectedCount)
+                  }
+                  aria-label={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers on current page"}
+                  title={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers"}
+                >
+                  Deselect all visible
+                </button>
+
+                {showOnlyFavorites && (
                   <button
                     type="button"
-                    className="secondary-button deselect-button"
-                    onClick={deselectAllVisible}
-                    disabled={!displayedWallpapers.length}
-                    aria-label={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers on current page"}
-                    title={showOnlySelected ? "Clear all selections and return to browsing" : "Deselect all visible wallpapers"}
+                    className="secondary-button unfavorite-button"
+                    onClick={handleUnfavoriteSelected}
+                    disabled={!selectedCount}
+                    aria-label={selectedCount
+                      ? `Remove ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''} from favorites`
+                      : 'No favorites selected to remove'}
+                    title={selectedCount
+                      ? `Unfavorite ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''}`
+                      : 'Select one or more favorites to unfavorite'}
                   >
-                    Deselect all visible
+                    Unfavorite selected
+                  </button>
+                )}
+
+                {showOnlyDownloaded && (
+                  <button
+                    type="button"
+                    className="secondary-button unfavorite-button"
+                    onClick={handleRemoveDownloadedSelected}
+                    disabled={!selectedCount}
+                    aria-label={selectedCount
+                      ? `Remove ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''} from download history`
+                      : 'No downloaded wallpapers selected to remove from history'}
+                    title={selectedCount
+                      ? `Remove ${selectedCount} selected wallpaper${selectedCount !== 1 ? 's' : ''} from download history`
+                      : 'Select one or more downloaded wallpapers to remove from history'}
+                  >
+                    Remove from history
                   </button>
                 )}
 
@@ -743,11 +932,14 @@ function App() {
             wallpapers={displayedWallpapers}
             selectedIds={selectedIds}
             favorites={favorites}
+            downloadedIds={downloadedIds}
             onToggleSelect={toggleSelect}
             onToggleFavorite={toggleFavorite}
             onWallpaperClick={handleWallpaperClick}
             onColorClick={handleColorClick}
             onSearchSimilar={handleSearchSimilar}
+            isDownloaded={isDownloaded}
+            onMarkDownloaded={markDownloaded}
             viewMode={viewMode}
             isLoading={isLoading}
           />
@@ -804,6 +996,8 @@ function App() {
           hasPrevious={hasPreviousPreview}
           isFavorite={isFavorite(previewWallpaper.id)}
           onToggleFavorite={toggleFavorite}
+          isDownloaded={isDownloaded(previewWallpaper.id)}
+          onMarkDownloaded={markDownloaded}
           onColorClick={handleColorClick}
           onTagClick={handleTagClick}
           onSearchSimilar={handleSearchSimilar}

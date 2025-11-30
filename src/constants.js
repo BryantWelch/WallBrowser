@@ -153,6 +153,8 @@ export const VIEW_MODES = {
   COMPACT: 'compact',
   COMFORTABLE: 'comfortable',
   COZY: 'cozy',
+  CINEMATIC: 'cinematic',
+  CRAMPED: 'cramped',
 };
 
 export const DEFAULT_FILTERS = {
@@ -177,6 +179,7 @@ export const STORAGE_KEYS = {
   FILTERS: 'wallhaven-filters',
   FAVORITES: 'wallhaven-favorites',
   VIEW_MODE: 'wallhaven-view-mode',
+  DOWNLOADED: 'wallhaven-downloaded',
 };
 
 export const API_CONFIG = {

@@ -52,7 +52,7 @@ export async function createWallpapersZip(wallpapers) {
   await Promise.all(wallpapers.map(async (wallpaper) => {
     try {
       const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
-      folder.file(`wallpaper-${wallpaper.id}.${ext}`, blob);
+      folder.file(`wallbrowser-${wallpaper.id}.${ext}`, blob);
     } catch (err) {
       console.error(`Failed to download ${wallpaper.id}:`, err);
     }

@@ -10,8 +10,10 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   index,
   isSelected, 
   isFavorite,
+  isDownloaded,
   onToggleSelect, 
   onToggleFavorite,
+  onMarkDownloaded,
   onClick,
   onColorClick,
   onSearchSimilar,
@@ -60,12 +62,15 @@ export const WallpaperCard = React.memo(function WallpaperCard({
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
+      // Mark as downloaded in persistent store
+      onMarkDownloaded?.(wallpaper.id);
+
       addToast('Download complete!', 'success');
     } catch (err) {
       console.error('Download failed:', err);
       addToast('Failed to download wallpaper. Please try again.', 'error');
     }
-  }, [wallpaper, addToast]);
+  }, [wallpaper, addToast, onMarkDownloaded]);
 
   const handleClick = useCallback(() => {
     onClick(wallpaper);
@@ -109,16 +114,22 @@ export const WallpaperCard = React.memo(function WallpaperCard({
 
       <button
         type="button"
-        className="wallpaper-download-toggle"
+        className={`wallpaper-download-toggle ${isDownloaded ? 'wallpaper-download-downloaded' : ''}`}
         onClick={handleDownload}
-        title="Download wallpaper"
-        aria-label="Download wallpaper"
+        title={isDownloaded ? 'Already downloaded (click to download again)' : 'Download wallpaper'}
+        aria-label={isDownloaded ? 'Already downloaded. Download again' : 'Download wallpaper'}
       >
-        <svg className="action-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        {isDownloaded ? (
+          <svg className="action-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        ) : (
+          <svg className="action-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        )}
       </button>
 
       <button

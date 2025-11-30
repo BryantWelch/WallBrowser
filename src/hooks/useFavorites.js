@@ -20,6 +20,12 @@ export function useFavorites() {
     setFavorites((prev) => prev.filter((fav) => fav.id !== id));
   };
 
+  const removeManyFavorites = (ids) => {
+    if (!ids || ids.length === 0) return;
+    const removeSet = new Set(ids);
+    setFavorites((prev) => prev.filter((fav) => !removeSet.has(fav.id)));
+  };
+
   const toggleFavorite = (wallpaper) => {
     if (isFavorite(wallpaper.id)) {
       removeFavorite(wallpaper.id);
@@ -40,6 +46,7 @@ export function useFavorites() {
     favorites,
     addFavorite,
     removeFavorite,
+    removeManyFavorites,
     toggleFavorite,
     isFavorite,
     clearFavorites,

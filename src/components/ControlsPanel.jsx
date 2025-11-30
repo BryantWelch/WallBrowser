@@ -473,9 +473,11 @@ export function ControlsPanel({
             onChange={(e) => onViewModeChange(e.target.value)}
             aria-label="Grid view mode"
           >
+            <option value={VIEW_MODES.CRAMPED}>Cramped</option>
             <option value={VIEW_MODES.COMPACT}>Compact</option>
             <option value={VIEW_MODES.COMFORTABLE}>Comfortable</option>
             <option value={VIEW_MODES.COZY}>Cozy</option>
+            <option value={VIEW_MODES.CINEMATIC}>Cinematic</option>
           </select>
         </div>
       </div>

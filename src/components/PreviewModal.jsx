@@ -14,6 +14,8 @@ export function PreviewModal({
   hasPrevious,
   isFavorite,
   onToggleFavorite,
+  isDownloaded,
+  onMarkDownloaded,
   onColorClick,
   onTagClick,
   onSearchSimilar,
@@ -124,6 +126,9 @@ export function PreviewModal({
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
+      // Mark as downloaded
+      onMarkDownloaded?.(wallpaper.id);
+
       addToast('Download complete!', 'success');
     } catch (err) {
       console.error('Download failed:', err);
@@ -312,15 +317,21 @@ export function PreviewModal({
               <button
                 type="button"
                 onClick={handleDownload}
-                className="preview-action-button preview-action-download"
-                aria-label="Download wallpaper"
-                title="Download wallpaper"
+                className={`preview-action-button preview-action-download ${isDownloaded ? 'preview-download-downloaded' : ''}`}
+                aria-label={isDownloaded ? 'Already downloaded. Download again' : 'Download wallpaper'}
+                title={isDownloaded ? 'Already downloaded (click to download again)' : 'Download wallpaper'}
               >
-                <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
+                {isDownloaded ? (
+                  <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                ) : (
+                  <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                )}
               </button>
               <a
                 href={wallpaper.permalink}
