@@ -180,6 +180,7 @@ export const STORAGE_KEYS = {
   FAVORITES: 'wallhaven-favorites',
   VIEW_MODE: 'wallhaven-view-mode',
   DOWNLOADED: 'wallhaven-downloaded',
+  DOWNLOADED_DATA: 'wallhaven-downloaded-data',
 };
 
 export const API_CONFIG = {

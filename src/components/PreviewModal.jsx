@@ -29,6 +29,7 @@ export function PreviewModal({
   const [showAllTags, setShowAllTags] = React.useState(false);
   const [uploaderName, setUploaderName] = React.useState(null);
   const [uploaderAvatar, setUploaderAvatar] = React.useState(null);
+  const [downloadStatus, setDownloadStatus] = React.useState('idle'); // 'idle', 'downloading', 'error'
   const modalRef = React.useRef(null);
   
   const fullImageUrl = React.useMemo(() => toProxiedFullUrl(wallpaper.url), [wallpaper.url]);
@@ -114,6 +115,7 @@ export function PreviewModal({
   // Handle download
   const handleDownload = async () => {
     try {
+      setDownloadStatus('downloading');
       const { blob, ext } = await downloadWallpaperBlob(wallpaper.url);
       
       // Create download link
@@ -127,12 +129,15 @@ export function PreviewModal({
       URL.revokeObjectURL(blobUrl);
       
       // Mark as downloaded
-      onMarkDownloaded?.(wallpaper.id);
+      onMarkDownloaded?.(wallpaper);
 
       addToast('Download complete!', 'success');
+      setDownloadStatus('idle');
     } catch (err) {
       console.error('Download failed:', err);
       addToast('Failed to download wallpaper. Please try again.', 'error');
+      setDownloadStatus('error');
+      setTimeout(() => setDownloadStatus('idle'), 2000);
     }
   };
 
@@ -317,11 +322,16 @@ export function PreviewModal({
               <button
                 type="button"
                 onClick={handleDownload}
-                className={`preview-action-button preview-action-download ${isDownloaded ? 'preview-download-downloaded' : ''}`}
+                className={`preview-action-button preview-action-download ${isDownloaded ? 'preview-download-downloaded' : ''} ${downloadStatus === 'error' ? 'preview-download-error' : ''}`}
                 aria-label={isDownloaded ? 'Already downloaded. Download again' : 'Download wallpaper'}
                 title={isDownloaded ? 'Already downloaded (click to download again)' : 'Download wallpaper'}
               >
-                {isDownloaded ? (
+                {downloadStatus === 'error' ? (
+                  <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                ) : isDownloaded ? (
                   <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>

@@ -75,7 +75,7 @@ function App() {
   const { favorites, toggleFavorite, isFavorite, removeFavorite, removeManyFavorites } = useFavorites();
 
   // Downloaded wallpapers tracking (per-device)
-  const { downloadedIds, markDownloaded, isDownloaded, removeDownloaded } = useDownloadedWallpapers();
+  const { downloadedIds, markDownloaded: markDownloadedIds, isDownloaded, removeDownloaded } = useDownloadedWallpapers();
   
   // Search history management
   const { history: searchHistory, addToHistory, removeFromHistory, clearHistory } = useSearchHistory();
@@ -94,6 +94,7 @@ function App() {
   // Show only downloaded wallpapers toggle
   const [showOnlyDownloaded, setShowOnlyDownloaded] = useState(false);
   const [pageBeforeShowingDownloaded, setPageBeforeShowingDownloaded] = useState(1);
+  const [downloadedViewWallpapers, setDownloadedViewWallpapers] = useLocalStorage(STORAGE_KEYS.DOWNLOADED_DATA, []);
   
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -260,13 +261,13 @@ function App() {
     }
   }, [wallpapers, page, totalPages, filters, isLoading, prefetchPages]);
   
-  // Filter wallpapers based on showOnlySelected or showOnlyFavorites (needed for range selection)
+  // Filter wallpapers based on showOnlySelected, favorites, or downloaded (needed for range selection)
   const displayedWallpapers = showOnlySelected 
     ? Array.from(selectedWallpapers.values())
     : showOnlyFavorites
     ? favorites
     : showOnlyDownloaded
-    ? wallpapers.filter(w => isDownloaded(w.id))
+    ? downloadedViewWallpapers
     : wallpapers;
   
   // Toggle selection (with shift-click range selection support)
@@ -386,6 +387,13 @@ function App() {
 
     removeDownloaded(idsToRemove);
 
+    // Also remove from cached downloaded view data
+    setDownloadedViewWallpapers((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const removeSet = new Set(idsToRemove);
+      return current.filter((w) => !removeSet.has(w.id));
+    });
+
     // Clear those ids from selection state
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -406,7 +414,7 @@ function App() {
         : `Removed ${idsToRemove.length} wallpapers from download history.`,
       'success'
     );
-  }, [selectedIds, downloadedIds, removeDownloaded, addToast]);
+  }, [selectedIds, downloadedIds, removeDownloaded, setDownloadedViewWallpapers, addToast]);
 
   // Bulk unfavorite selected wallpapers (primarily used in favorites view)
   const handleUnfavoriteSelected = useCallback(() => {
@@ -444,6 +452,34 @@ function App() {
     );
   }, [selectedIds, favorites, removeManyFavorites, addToast]);
   
+  // Helper to mark wallpapers as downloaded and cache their full data
+  const markDownloaded = useCallback((wallpaperOrWallpapers) => {
+    if (!wallpaperOrWallpapers) return;
+
+    const wallpapersArray = Array.isArray(wallpaperOrWallpapers)
+      ? wallpaperOrWallpapers
+      : [wallpaperOrWallpapers];
+
+    const ids = wallpapersArray
+      .map((w) => (w && w.id ? w.id : null))
+      .filter(Boolean);
+
+    if (ids.length) {
+      markDownloadedIds(ids);
+    }
+
+    setDownloadedViewWallpapers((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const byId = new Map(current.map((w) => [w.id, w]));
+      wallpapersArray.forEach((w) => {
+        if (w && w.id) {
+          byId.set(w.id, w);
+        }
+      });
+      return Array.from(byId.values());
+    });
+  }, [markDownloadedIds, setDownloadedViewWallpapers]);
+
   // Download selected with ZIP
   const handleDownloadSelected = useCallback(async () => {
     // Use selectedWallpapers Map to get all selected wallpapers across all pages
@@ -469,7 +505,7 @@ function App() {
         URL.revokeObjectURL(blobUrl);
         
         // Mark as downloaded
-        markDownloaded(wallpaper.id);
+        markDownloaded(wallpaper);
 
         setDownloadStatus('success');
         addToast('Download complete!', 'success');
@@ -483,7 +519,7 @@ function App() {
       setDownloadStatus('zipping');
       addToast(`Preparing ZIP for ${selected.length} wallpapers...`, 'loading', 3000);
 
-      const content = await createWallpapersZip(selected);
+      const { content, successfulIds, failed } = await createWallpapersZip(selected);
       
       const blobUrl = URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -494,15 +530,31 @@ function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
       
-      // Mark all selected wallpapers as downloaded
-      markDownloaded(selected.map((w) => w.id));
+      // Mark only successfully downloaded wallpapers as downloaded (with full objects)
+      if (Array.isArray(successfulIds) && successfulIds.length > 0) {
+        const successSet = new Set(successfulIds);
+        const successfulWallpapers = selected.filter((w) => successSet.has(w.id));
+        if (successfulWallpapers.length > 0) {
+          markDownloaded(successfulWallpapers);
+        }
+      }
 
       setDownloadStatus('success');
-      addToast('ZIP download ready!', 'success');
+      if (failed && failed.length > 0) {
+        const total = selected.length;
+        const successCount = successfulIds ? successfulIds.length : 0;
+        const failedCount = failed.length;
+        addToast(
+          `ZIP ready: downloaded ${successCount} of ${total} wallpapers (${failedCount} failed).`,
+          'warning'
+        );
+      } else {
+        addToast('ZIP download ready!', 'success');
+      }
+
       setSelectedIds(new Set());
       setSelectedWallpapers(new Map());
       setTimeout(() => setDownloadStatus('idle'), 2000);
-      
     } catch (err) {
       console.error('Download failed:', err);
       setDownloadStatus('error');
@@ -732,6 +784,9 @@ function App() {
     }
   }, [showOnlyDownloaded, downloadedIds, pageBeforeShowingDownloaded, goToPage]);
   
+  const effectiveCurrentPage = (showOnlyFavorites || showOnlyDownloaded) ? 1 : page;
+  const effectiveTotalPages = (showOnlyFavorites || showOnlyDownloaded) ? 1 : totalPages;
+
   return (
     <div className="app-root">
       <header className="app-header">
@@ -787,9 +842,9 @@ function App() {
         />
 
         <PaginationBar
-          currentPage={page}
-          totalPages={totalPages}
-          totalResults={totalResults}
+          currentPage={effectiveCurrentPage}
+          totalPages={effectiveTotalPages}
+          totalResults={showOnlyFavorites ? favorites.length : showOnlyDownloaded ? displayedWallpapers.length : totalResults}
           onPageChange={goToPage}
           onPrevious={goToPreviousPage}
           onNext={goToNextPage}
@@ -946,15 +1001,15 @@ function App() {
 
           {wallpapers.length > 0 && (
             <PaginationBar
-              currentPage={page}
-              totalPages={totalPages}
+              currentPage={effectiveCurrentPage}
+              totalPages={effectiveTotalPages}
               totalResults={totalResults}
               onPageChange={goToPage}
               onNext={goToNextPage}
               onPrevious={goToPreviousPage}
-              isLoading={isLoading || showOnlySelected}
-              canGoNext={canGoNext && !showOnlySelected}
-              canGoPrevious={canGoPrevious && !showOnlySelected}
+              isLoading={isLoading || showOnlySelected || showOnlyFavorites || showOnlyDownloaded}
+              canGoNext={canGoNext && !showOnlySelected && !showOnlyFavorites && !showOnlyDownloaded}
+              canGoPrevious={canGoPrevious && !showOnlySelected && !showOnlyFavorites && !showOnlyDownloaded}
             />
           )}
         </section>

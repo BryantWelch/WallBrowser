@@ -63,7 +63,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
       URL.revokeObjectURL(blobUrl);
       
       // Mark as downloaded in persistent store
-      onMarkDownloaded?.(wallpaper.id);
+      onMarkDownloaded?.(wallpaper);
 
       addToast('Download complete!', 'success');
     } catch (err) {
