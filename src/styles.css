@@ -90,6 +90,7 @@ body {
   box-shadow: 0 0 20px rgba(124, 58, 237, 0.2);
   transition: all 0.2s ease;
   cursor: help;
+  text-decoration: none;
 }
 
 .header-stats:hover {
@@ -255,7 +256,37 @@ body {
   display: flex;
   gap: 1rem;
   align-items: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.control-item-clear {
+  margin-left: auto;
+  min-width: auto;
+  flex: 0 0 auto;
+}
+
+.clear-filters-button {
+  white-space: nowrap;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.control-item-toprange {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.control-item-toprange select {
+  cursor: not-allowed;
+}
+
+.control-item-toprange.control-item-toprange-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.control-item-toprange.control-item-toprange-active select {
+  cursor: pointer;
 }
 
 /* Content filters row */
@@ -505,6 +536,11 @@ body {
   letter-spacing: 0.05em;
 }
 
+.filter-active-indicator {
+  margin-left: 0.25rem;
+  color: var(--accent);
+}
+
 .control-item input[type="text"],
 .control-item select {
   padding: 0.5rem 0.65rem;
@@ -667,6 +703,16 @@ body {
 .primary-button.download-error {
   background: linear-gradient(135deg, #dc2626, #ef4444) !important;
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
+}
+
+.primary-button-pending {
+  animation: fetchPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fetchPulse {
+  0% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.0); }
+  50% { transform: translateY(-1px); box-shadow: 0 0 12px 2px rgba(37, 99, 235, 0.5); }
+  100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.0); }
 }
 
 .secondary-button {
@@ -997,11 +1043,18 @@ body {
   box-shadow: 0 12px 35px rgba(15, 23, 42, 0.9);
   display: flex;
   flex-direction: column;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
 .wallpaper-card-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-soft), 0 16px 45px rgba(30, 64, 175, 0.9);
+}
+
+.wallpaper-card:hover {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 1), 0 0 0 1px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 
 .wallpaper-select-toggle {
@@ -1024,7 +1077,9 @@ body {
 
 .wallpaper-select-toggle:hover {
   background: rgba(15, 23, 42, 0.95);
-  transform: scale(1.1);
+  border: 1px solid rgba(37, 99, 235, 0.75);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.5);
+  transform: scale(1.05);
 }
 
 .wallpaper-select-toggle:hover .checkbox {
@@ -1113,6 +1168,16 @@ body {
   border-color: rgba(75, 85, 99, 0.6);
   color: var(--text-primary);
   transform: translateY(-1px);
+}
+
+.wallpaper-pill-clickable {
+  cursor: pointer;
+}
+
+.wallpaper-pill-clickable:hover {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.65);
+  color: var(--text-primary);
 }
 
 .wallpaper-icon {
@@ -1241,7 +1306,9 @@ body {
 
 .wallpaper-favorite-toggle:hover {
   background: rgba(15, 23, 42, 0.95);
-  transform: scale(1.1);
+  border: 1px solid rgba(37, 99, 235, 0.75);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.5);
+  transform: scale(1.05);
 }
 
 .wallpaper-favorite-toggle:hover .heart {
@@ -1272,7 +1339,9 @@ body {
 
 .wallpaper-download-toggle:hover {
   background: rgba(15, 23, 42, 0.95);
-  transform: scale(1.1);
+  border: 1px solid rgba(37, 99, 235, 0.75);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.5);
+  transform: scale(1.05);
 }
 
 .action-icon-small {

@@ -10,6 +10,7 @@ export function WallpaperGrid({
   onToggleFavorite,
   onWallpaperClick,
   onColorClick,
+  onResolutionClick,
   onSearchSimilar,
   isDownloaded,
   onMarkDownloaded,
@@ -48,6 +49,7 @@ export function WallpaperGrid({
           onMarkDownloaded={onMarkDownloaded}
           onClick={onWallpaperClick}
           onColorClick={onColorClick}
+          onResolutionClick={onResolutionClick}
           onSearchSimilar={onSearchSimilar}
           viewMode={viewMode}
         />

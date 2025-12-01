@@ -16,6 +16,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   onMarkDownloaded,
   onClick,
   onColorClick,
+  onResolutionClick,
   onSearchSimilar,
   viewMode = VIEW_MODES.COMFORTABLE
 }) {
@@ -80,6 +81,13 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     e.stopPropagation();
     onSearchSimilar?.(wallpaper.id);
   }, [onSearchSimilar, wallpaper.id]);
+
+  const handleResolutionClick = useCallback((e) => {
+    e.stopPropagation();
+    if (onResolutionClick && wallpaper.width && wallpaper.height) {
+      onResolutionClick(wallpaper.width, wallpaper.height);
+    }
+  }, [onResolutionClick, wallpaper.width, wallpaper.height]);
 
 
   return (
@@ -156,11 +164,16 @@ export const WallpaperCard = React.memo(function WallpaperCard({
       </button>
 
       <div className="wallpaper-meta">
-        {/* Row 1: Image info (resolution, file size, file type) */}
         <div className="wallpaper-pills wallpaper-pills-info">
-          <span className="wallpaper-pill" title={`Resolution: ${label}`}>
+          <button
+            type="button"
+            className="wallpaper-pill wallpaper-pill-clickable"
+            title={`Resolution: ${label} - Click to search`}
+            onClick={handleResolutionClick}
+            aria-label={`Filter by resolution ${label}`}
+          >
             {label}
-          </span>
+          </button>
           {formattedFileSize && (
             <span className="wallpaper-pill" title={`File size: ${formattedFileSize}`}>
               {formattedFileSize}

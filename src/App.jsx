@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ControlsPanel } from './components/ControlsPanel';
 import { WallpaperGrid } from './components/WallpaperGrid';
 import { PaginationBar } from './components/PaginationBar';
@@ -109,6 +109,9 @@ function App() {
   // Download status state
   const [downloadStatus, setDownloadStatus] = useState('idle'); // 'idle', 'downloading', 'zipping', 'success', 'error'
 
+  // Track when filters have changed but Fetch hasn't been pressed yet
+  const [hasPendingFilterChanges, setHasPendingFilterChanges] = useState(false);
+
   const getDownloadButtonLabel = useCallback((status, count) => {
     if (status === 'downloading') return '⏳ Downloading...';
     if (status === 'zipping') return '⏳ Creating ZIP...';
@@ -126,6 +129,10 @@ function App() {
       setTotalPages(apiTotalPages);
     }
   }, [apiTotalPages, setTotalPages]);
+
+  const isDefaultFilters = useMemo(() => {
+    return JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS);
+  }, [filters]);
   
   // Handle filter changes (no auto-fetch, just update state)
   const handleFilterChange = useCallback((key, value) => {
@@ -133,6 +140,7 @@ function App() {
       ...prev,
       [key]: value
     }));
+    setHasPendingFilterChanges(true);
     // Reset to page 1, but don't fetch (user must click Fetch button)
     if (page !== 1) {
       resetPage();
@@ -145,7 +153,17 @@ function App() {
       ...prev,
       ...updates
     }));
+    setHasPendingFilterChanges(true);
     // Reset to page 1, but don't fetch (user must click Fetch button)
+    if (page !== 1) {
+      resetPage();
+    }
+  }, [page, resetPage]);
+
+  // Clear all filters back to defaults (no auto-fetch)
+  const handleClearFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setHasPendingFilterChanges(false);
     if (page !== 1) {
       resetPage();
     }
@@ -167,6 +185,7 @@ function App() {
   const handleFetch = useCallback(async () => {
     // Clear cache to ensure fresh results
     clearCache();
+    setHasPendingFilterChanges(false);
     // Clear selections when user manually fetches (new search)
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
@@ -598,6 +617,29 @@ function App() {
     await fetchWallpapers(updatedFilters, 1);
   }, [filters, setFilters, resetPage, fetchWallpapers]);
 
+  // Handle resolution click from thumbnails
+  const handleResolutionClick = useCallback(async (width, height) => {
+    if (!width || !height) return;
+
+    const resolutionValue = `${width}x${height}`;
+
+    const updatedFilters = {
+      ...filters,
+      resolution: resolutionValue,
+      exactResolution: true,
+      ratio: ''
+    };
+
+    setFilters(updatedFilters);
+
+    setPreviewWallpaper(null);
+    resetPage();
+    setSelectedIds(new Set());
+    setSelectedWallpapers(new Map());
+
+    await fetchWallpapers(updatedFilters, 1);
+  }, [filters, setFilters, resetPage, fetchWallpapers]);
+
   // Handle tag click in preview modal
   const handleTagClick = useCallback(async (tagName) => {
     // Update filters with the tag search
@@ -811,13 +853,16 @@ function App() {
           </div>
           <div className="app-header-right">
             {totalWallpapers && (
-              <div 
+              <a
+                href="https://wallhaven.cc/stats"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="header-stats header-stats-total"
-                title="Total wallpapers in Wallhaven's database. Add API key in Settings for full access."
+                title="View detailed Wallhaven stats. Add API key in Settings for full access."
               >
                 <span className="header-stat-number">{totalWallpapers.toLocaleString()}</span>
                 <span className="header-stat-label">Wallpapers</span>
-              </div>
+              </a>
             )}
           </div>
         </div>
@@ -828,6 +873,9 @@ function App() {
           filters={filters}
           onFilterChange={handleFilterChange}
           onMultipleFilterChanges={handleMultipleFilterChanges}
+          onClearFilters={handleClearFilters}
+          isClearDisabled={isDefaultFilters}
+          hasPendingFilterChanges={hasPendingFilterChanges}
           onFetch={handleFetch}
           isLoading={isLoading}
           error={error}
@@ -992,6 +1040,7 @@ function App() {
             onToggleFavorite={toggleFavorite}
             onWallpaperClick={handleWallpaperClick}
             onColorClick={handleColorClick}
+            onResolutionClick={handleResolutionClick}
             onSearchSimilar={handleSearchSimilar}
             isDownloaded={isDownloaded}
             onMarkDownloaded={markDownloaded}

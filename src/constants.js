@@ -112,7 +112,7 @@ export const SORT_OPTIONS = [
   { value: 'random', label: 'Random' },
   { value: 'views', label: 'Views' },
   { value: 'favorites', label: 'Favorites' },
-  { value: 'toplist', label: 'Top' },
+  { value: 'toplist', label: 'Top Range' },
 ];
 
 export const TIME_RANGE_OPTIONS = [

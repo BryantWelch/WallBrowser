@@ -7,6 +7,7 @@ import {
   ASPECT_RATIO_OPTIONS,
   VIEW_MODES,
   FILE_TYPE_OPTIONS,
+  DEFAULT_FILTERS,
 } from '../constants';
 import { formatHistoryTime } from '../hooks/useSearchHistory';
 
@@ -14,6 +15,9 @@ export function ControlsPanel({
   filters,
   onFilterChange,
   onMultipleFilterChanges,
+  onClearFilters,
+  isClearDisabled,
+  hasPendingFilterChanges,
   onFetch,
   isLoading,
   error,
@@ -104,6 +108,24 @@ export function ControlsPanel({
   }, []);
   const historyRef = useRef(null);
   const historyButtonRef = useRef(null);
+
+  const isSearchActive = !!filters.query;
+  const isRatioActive = filters.ratio !== DEFAULT_FILTERS.ratio;
+  const isResolutionActive =
+    filters.resolution !== DEFAULT_FILTERS.resolution ||
+    filters.exactResolution !== DEFAULT_FILTERS.exactResolution;
+  const isSortActive = filters.sort !== DEFAULT_FILTERS.sort;
+  const isTopRangeActive =
+    filters.sort === 'toplist' && filters.timeRange !== DEFAULT_FILTERS.timeRange;
+  const isColorActive = filters.color !== DEFAULT_FILTERS.color;
+  const isFileTypeActive = filters.fileType !== DEFAULT_FILTERS.fileType;
+  const isCategoriesActive =
+    filters.categories.general !== DEFAULT_FILTERS.categories.general ||
+    filters.categories.anime !== DEFAULT_FILTERS.categories.anime ||
+    filters.categories.people !== DEFAULT_FILTERS.categories.people;
+
+  const hasCustomResolution =
+    !!filters.resolution && !RESOLUTION_PRESETS.some((p) => p.value === filters.resolution);
 
   // Close search hints when clicking outside
   useEffect(() => {
@@ -282,7 +304,9 @@ export function ControlsPanel({
         
         <div className="control-item control-item-button">
           <button
-            className="primary-button"
+            className={`primary-button ${
+              hasPendingFilterChanges && !isLoading ? 'primary-button-pending' : ''
+            }`}
             type="button"
             onClick={onFetch}
             disabled={isLoading}
@@ -297,7 +321,10 @@ export function ControlsPanel({
       <div className="controls-filters-row">
         {/* Aspect ratio */}
         <div className="control-item control-item-ratio">
-          <label htmlFor="ratio">Aspect ratio</label>
+          <label htmlFor="ratio">
+            Aspect ratio
+            {isRatioActive && <span className="filter-active-indicator">*</span>}
+          </label>
           <select
             id="ratio"
             value={filters.ratio}
@@ -326,7 +353,10 @@ export function ControlsPanel({
 
         {/* Resolution */}
         <div className="control-item control-item-resolution">
-          <label htmlFor="resolution">Resolution</label>
+          <label htmlFor="resolution">
+            Resolution
+            {isResolutionActive && <span className="filter-active-indicator">*</span>}
+          </label>
           <div className="control-with-addon">
             <select
               id="resolution"
@@ -369,6 +399,12 @@ export function ControlsPanel({
                   </option>
                 </>
               )}
+              {hasCustomResolution && (
+                <>
+                  <option disabled className="resolution-separator">─── Custom ───</option>
+                  <option value={filters.resolution}>{filters.resolution.replace('x', '×')}</option>
+                </>
+              )}
               {filteredResolutionPresets.map((preset) => (
                 <option 
                   key={preset.value} 
@@ -396,7 +432,10 @@ export function ControlsPanel({
 
         {/* Sort */}
         <div className="control-item control-item-sort">
-          <label htmlFor="sort">Sort</label>
+          <label htmlFor="sort">
+            Sort
+            {isSortActive && <span className="filter-active-indicator">*</span>}
+          </label>
           <select
             id="sort"
             value={filters.sort}
@@ -411,28 +450,37 @@ export function ControlsPanel({
           </select>
         </div>
 
-        {/* Top range - conditional */}
-        {filters.sort === 'toplist' && (
-          <div className="control-item control-item-animated">
-            <label htmlFor="timeRange">Top range</label>
-            <select
-              id="timeRange"
-              value={filters.timeRange}
-              onChange={(e) => onFilterChange('timeRange', e.target.value)}
-              aria-label="Time range for top wallpapers"
-            >
-              {TIME_RANGE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Top range - always visible, disabled unless sort is Top */}
+        <div
+          className={`control-item control-item-toprange ${
+            filters.sort === 'toplist' ? 'control-item-toprange-active' : ''
+          }`}
+        >
+          <label htmlFor="timeRange">
+            Top range
+            {isTopRangeActive && <span className="filter-active-indicator">*</span>}
+          </label>
+          <select
+            id="timeRange"
+            value={filters.timeRange}
+            onChange={(e) => onFilterChange('timeRange', e.target.value)}
+            aria-label="Time range for top wallpapers"
+            disabled={filters.sort !== 'toplist'}
+          >
+            {TIME_RANGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Color */}
         <div className="control-item control-item-color">
-          <label htmlFor="color">Color</label>
+          <label htmlFor="color">
+            Color
+            {isColorActive && <span className="filter-active-indicator">*</span>}
+          </label>
           <select
             id="color"
             value={filters.color}
@@ -449,7 +497,10 @@ export function ControlsPanel({
 
         {/* File Type */}
         <div className="control-item control-item-filetype">
-          <label htmlFor="fileType">File type</label>
+          <label htmlFor="fileType">
+            File type
+            {isFileTypeActive && <span className="filter-active-indicator">*</span>}
+          </label>
           <select
             id="fileType"
             value={filters.fileType}
@@ -464,7 +515,7 @@ export function ControlsPanel({
           </select>
         </div>
 
-        {/* View Mode */}
+        {/* View Mode (layout preference, not part of filter asterisk logic) */}
         <div className="control-item control-item-view">
           <label htmlFor="viewMode">View</label>
           <select
@@ -479,6 +530,18 @@ export function ControlsPanel({
             <option value={VIEW_MODES.COZY}>Cozy</option>
             <option value={VIEW_MODES.CINEMATIC}>Cinematic</option>
           </select>
+        </div>
+
+        <div className="control-item control-item-clear">
+          <button
+            type="button"
+            className="secondary-button clear-filters-button"
+            onClick={onClearFilters}
+            aria-label="Clear all filters"
+            disabled={isClearDisabled}
+          >
+            Clear
+          </button>
         </div>
       </div>
 
