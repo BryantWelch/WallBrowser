@@ -265,6 +265,37 @@ body {
   flex: 0 0 auto;
 }
 
+@media (max-width: 768px) {
+  .controls-filters-row {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .controls-filters-row .control-item {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 0;
+  }
+
+  .control-item-ratio,
+  .control-item-resolution,
+  .control-item-sort,
+  .control-item-toprange,
+  .control-item-color,
+  .control-item-filetype,
+  .control-item-view {
+    max-width: none;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .control-item-clear {
+    margin-left: 0;
+    flex: 1 1 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
 .clear-filters-button {
   white-space: nowrap;
   padding: 0.15rem 0.6rem;
