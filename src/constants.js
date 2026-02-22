@@ -131,22 +131,24 @@ export const FILE_TYPE_OPTIONS = [
 ];
 
 export const ASPECT_RATIO_OPTIONS = [
-  { label: 'Any', value: '' },
+  { label: 'Any', value: '', group: null },
   // Wide (sorted by aspect ratio)
-  { label: '16:9', value: '16x9' },
-  { label: '16:10', value: '16x10' },
-  { label: '21:9', value: '21x9' },
-  { label: '32:9', value: '32x9' },
-  { label: '48:9', value: '48x9' },
+  { label: '16:9 (Widescreen)', value: '16x9', group: 'Wide' },
+  { label: '16:10 (Widescreen+)', value: '16x10', group: 'Wide' },
+  { label: '21:9 (Ultrawide)', value: '21x9', group: 'Wide' },
+  { label: '32:9 (Super Ultrawide)', value: '32x9', group: 'Wide' },
+  { label: '48:9 (Triple Monitor)', value: '48x9', group: 'Wide' },
   // Portrait
-  { label: '9:16', value: '9x16' },
-  { label: '10:16', value: '10x16' },
-  { label: '9:18', value: '9x18' },
+  { label: '9:16 (Portrait)', value: '9x16', group: 'Portrait' },
+  { label: '9:21 (Portrait Ultrawide)', value: '9x21', group: 'Portrait' },
+  { label: '10:16 (Portrait Wide)', value: '10x16', group: 'Portrait' },
+  { label: '9:18 (Portrait Tall)', value: '9x18', group: 'Portrait' },
+  { label: '2:3 (Portrait Photo)', value: '2x3', group: 'Portrait' },
   // Square & Other
-  { label: '1:1', value: '1x1' },
-  { label: '3:2', value: '3x2' },
-  { label: '4:3', value: '4x3' },
-  { label: '5:4', value: '5x4' },
+  { label: '1:1 (Square)', value: '1x1', group: 'Square & Other' },
+  { label: '3:2 (Classic/Surface)', value: '3x2', group: 'Square & Other' },
+  { label: '4:3 (Classic)', value: '4x3', group: 'Square & Other' },
+  { label: '5:4 (Classic Square)', value: '5x4', group: 'Square & Other' },
 ];
 
 export const VIEW_MODES = {

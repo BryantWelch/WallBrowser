@@ -343,10 +343,16 @@ export function ControlsPanel({
             }}
             aria-label="Aspect ratio"
           >
-            {ASPECT_RATIO_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
+            <option value="">Any</option>
+            {['Wide', 'Portrait', 'Square & Other'].map((group) => (
+              <React.Fragment key={group}>
+                <option disabled className="resolution-separator">─── {group} ───</option>
+                {ASPECT_RATIO_OPTIONS.filter((o) => o.group === group).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </React.Fragment>
             ))}
           </select>
         </div>
