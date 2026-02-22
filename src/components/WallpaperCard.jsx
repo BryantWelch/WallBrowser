@@ -156,6 +156,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
             className="wallpaper-thumbnail"
             src={imageUrl}
             alt={wallpaper.title}
+            loading="lazy"
             style={{ opacity: imageLoaded ? 1 : 0 }}
             onLoad={handleLoad}
             onError={handleError}
