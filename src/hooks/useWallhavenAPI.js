@@ -4,6 +4,8 @@ import { getCachedData, setCachedData, generateCacheKey, parseWallhavenResponse,
 import { prefetchImage } from '../utils/imageUtils';
 import { getStoredApiKey } from '../utils/apiKeyStorage';
 
+const detailsCache = new Map();
+
 /**
  * Custom hook for Wallhaven API calls
  */
@@ -274,6 +276,10 @@ export function useWallhavenAPI() {
 
   // Fetch individual wallpaper details (includes tags)
   const fetchWallpaperDetails = useCallback(async (wallpaperId) => {
+    if (detailsCache.has(wallpaperId)) {
+      return detailsCache.get(wallpaperId);
+    }
+
     try {
       const apiKey = getStoredApiKey();
       const url = `${API_CONFIG.BASE_URL}/w/${wallpaperId}${apiKey ? `?apikey=${apiKey}` : ''}`;
@@ -294,7 +300,9 @@ export function useWallhavenAPI() {
       });
 
       const json = await response.json();
-      return json.data; // Returns full wallpaper object with tags
+      const details = json.data; // Returns full wallpaper object with tags
+      detailsCache.set(wallpaperId, details);
+      return details;
     } catch (err) {
       console.error('Failed to fetch wallpaper details:', err);
       return null;
