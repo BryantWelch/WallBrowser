@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { WallpaperCard } from './WallpaperCard';
 
 export function WallpaperGrid({ 
@@ -17,6 +17,9 @@ export function WallpaperGrid({
   viewMode = 'comfortable',
   isLoading
 }) {
+  const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
+  const downloadedSet = useMemo(() => new Set(downloadedIds || []), [downloadedIds]);
+
   if (wallpapers.length === 0 && !isLoading) {
     return (
       <div className="wallpaper-grid empty-state" role="status">
@@ -42,8 +45,8 @@ export function WallpaperGrid({
           wallpaper={wallpaper}
           index={index}
           isSelected={selectedIds.has(wallpaper.id)}
-          isFavorite={favorites.some((fav) => fav.id === wallpaper.id)}
-          isDownloaded={isDownloaded ? isDownloaded(wallpaper.id) : downloadedIds?.includes(wallpaper.id)}
+          isFavorite={favoriteIds.has(wallpaper.id)}
+          isDownloaded={isDownloaded ? isDownloaded(wallpaper.id) : downloadedSet.has(wallpaper.id)}
           onToggleSelect={onToggleSelect}
           onToggleFavorite={onToggleFavorite}
           onMarkDownloaded={onMarkDownloaded}
