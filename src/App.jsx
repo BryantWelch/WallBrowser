@@ -517,7 +517,7 @@ function App() {
         
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `wallhaven-${wallpaper.id}.${ext}`;
+        link.download = `wallbrowser-${wallpaper.id}.${ext}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
