@@ -12,11 +12,11 @@ A modern wallpaper browser for Wallhaven. Built with React, featuring advanced s
 - **Zero Setup** - Works immediately with public API, no configuration required
 - **Advanced Filtering** - Search by keywords, resolution (720p-8K), aspect ratio (13 options), color, categories
 - **Cross-Page Selection** - Select wallpapers across multiple pages, view only selected, download all as ZIP
-- **Random Discovery** - Dedicated 🎲 button with animated dice for instant random wallpapers
+- **Random Discovery** - One-click random results via the **Random** sort option
 - **Quick Preview** - Full-screen modal with keyboard navigation (arrow keys)
 - **Favorites System** - Save wallpapers locally for quick access
-- **API Key Support** - Optional: Add your API key via ⚙️ Settings for NSFW/Sketchy content
-- **View Modes** - Switch between Compact, Comfortable, and Cozy grid layouts
+- **API Key Support** - Optional: Add your API key via ⚙️ Settings modal
+- **View Modes** - Switch between Cramped, Compact, Comfortable, Cozy, and Cinematic grid layouts
 - **Keyboard Shortcuts** - Enter to search, Escape to close, Ctrl+A to select all, arrow keys to navigate
 - **Smart Caching** - 5-minute API cache with auto-retry on failures
 - **Responsive Design** - Works beautifully on desktop, tablet, and mobile
@@ -65,7 +65,7 @@ Your API key is stored locally in your browser (localStorage) and never sent any
 
 ## 💡 Usage Tips
 
-- **Random Search** - Click the 🎲 dice button for instant random wallpapers
+- **Random Search** - Choose **Random** in the Sort dropdown for instant surprise wallpapers
 - **Cross-Page Selection** - Select wallpapers on multiple pages, click "Show selected →" to review all at once
 - **Bulk Download** - Select wallpapers → "Download selected" → Get a ZIP with all images
 - **Keyboard Navigation** - Use arrow keys in preview modal, Ctrl+A to select all visible
