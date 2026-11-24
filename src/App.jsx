@@ -640,6 +640,44 @@ function App() {
     await fetchWallpapers(updatedFilters, 1);
   }, [filters, setFilters, resetPage, fetchWallpapers]);
 
+  // Handle uploader click in preview modal
+  const handleUploaderClick = useCallback(async (username) => {
+    const name = String(username || '').replace(/^@/, '').trim();
+    if (!name || name === 'Anonymous') return;
+
+    const updatedFilters = {
+      ...filters,
+      query: `@${name}`
+    };
+    setFilters(updatedFilters);
+    setPreviewWallpaper(null);
+    resetPage();
+    setSelectedIds(new Set());
+    setSelectedWallpapers(new Map());
+    await fetchWallpapers(updatedFilters, 1);
+  }, [filters, setFilters, resetPage, fetchWallpapers]);
+
+  // Handle category click in preview modal
+  const handleCategoryClick = useCallback(async (category) => {
+    const key = String(category || '').toLowerCase();
+    if (!['general', 'anime', 'people'].includes(key)) return;
+
+    const updatedFilters = {
+      ...filters,
+      categories: {
+        general: key === 'general',
+        anime: key === 'anime',
+        people: key === 'people',
+      }
+    };
+    setFilters(updatedFilters);
+    setPreviewWallpaper(null);
+    resetPage();
+    setSelectedIds(new Set());
+    setSelectedWallpapers(new Map());
+    await fetchWallpapers(updatedFilters, 1);
+  }, [filters, setFilters, resetPage, fetchWallpapers]);
+
   // Handle tag click in preview modal
   const handleTagClick = useCallback(async (tagName) => {
     // Update filters with the tag search
@@ -706,6 +744,39 @@ function App() {
   const hasNextPreview = previewIndex < wallpapers.length - 1 || (canGoNext && !showOnlySelected && !showOnlyFavorites);
   const hasPreviousPreview = previewIndex > 0 || (canGoPrevious && !showOnlySelected && !showOnlyFavorites);
 
+  // Wallhaven returns 24 per page. Keep the counter on the page that actually
+  // owns the list currently on screen while the next page is still loading.
+  const WALLHAVEN_PAGE_SIZE = 24;
+  const loadedResultsPageRef = useRef(page);
+  useEffect(() => {
+    if (!isLoading) loadedResultsPageRef.current = page;
+  }, [isLoading, page]);
+
+  const previewPosition = useMemo(() => {
+    if (!previewWallpaper) return null;
+
+    if (showOnlyFavorites || showOnlySelected || showOnlyDownloaded) {
+      const index = displayedWallpapers.findIndex((item) => item.id === previewWallpaper.id);
+      if (index < 0 || displayedWallpapers.length === 0) return null;
+      return { current: index + 1, total: displayedWallpapers.length };
+    }
+
+    if (previewIndex < 0 || typeof totalResults !== 'number' || totalResults < 1) return null;
+    const resultsPage = isLoading ? loadedResultsPageRef.current : page;
+    const current = Math.min((resultsPage - 1) * WALLHAVEN_PAGE_SIZE + previewIndex + 1, totalResults);
+    return { current, total: totalResults };
+  }, [
+    previewWallpaper,
+    showOnlyFavorites,
+    showOnlySelected,
+    showOnlyDownloaded,
+    displayedWallpapers,
+    previewIndex,
+    totalResults,
+    isLoading,
+    page,
+  ]);
+
   // While preview is open, prefetch the next full image within the current page
   // so navigation feels snappier without globally preloading all full images.
   useEffect(() => {
@@ -728,6 +799,7 @@ function App() {
   useKeyboardShortcuts({
     onEnter: handleFetch,
     onEscape: () => {
+      if (document.fullscreenElement) return;
       if (previewWallpaper) {
         handlePreviewClose();
       }
@@ -1104,8 +1176,12 @@ function App() {
           onMarkDownloaded={markDownloaded}
           onColorClick={handleColorClick}
           onTagClick={handleTagClick}
+          onUploaderClick={handleUploaderClick}
+          onResolutionClick={handleResolutionClick}
+          onCategoryClick={handleCategoryClick}
           onSearchSimilar={handleSearchSimilar}
           fetchWallpaperDetails={fetchWallpaperDetails}
+          previewPosition={previewPosition}
           isLoadingPage={isLoading}
         />
       )}

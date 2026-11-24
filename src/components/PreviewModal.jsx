@@ -1,9 +1,104 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect } from 'react';
 import { formatFileSize, formatRelativeDate, getFavoriteToast } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
 import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl, downloadWallpaperBlob } from '../utils/imageUtils';
+
+function PreviewTags({ tags, onTagClick }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const containerRef = React.useRef(null);
+  const [visibleCount, setVisibleCount] = React.useState(tags.length);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || tags.length === 0) return;
+
+    const measure = () => {
+      const tagEls = container.querySelectorAll('[data-measure-tag]');
+      const moreEl = container.querySelector('[data-measure-more]');
+      if (!tagEls.length) return;
+
+      const maxWidth = container.clientWidth;
+      if (maxWidth <= 0) return;
+
+      const style = getComputedStyle(container);
+      const gap = Number.parseFloat(style.columnGap || style.gap) || 0;
+      const moreWidth = (moreEl?.offsetWidth ?? 0) + 4;
+      let used = 0;
+      let count = 0;
+
+      for (let i = 0; i < tagEls.length; i += 1) {
+        const gapBefore = count > 0 ? gap : 0;
+        const reserve = i < tagEls.length - 1 ? gap + moreWidth : 0;
+        if (used + gapBefore + tagEls[i].offsetWidth + reserve > maxWidth + 1) break;
+        used += gapBefore + tagEls[i].offsetWidth;
+        count += 1;
+      }
+
+      const next = Math.max(count, 1);
+      setVisibleCount((prev) => (prev === next ? prev : next));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [tags]);
+
+  if (tags.length === 0) return null;
+
+  const shown = expanded ? tags : tags.slice(0, visibleCount);
+  const hiddenCount = tags.length - shown.length;
+
+  return (
+    <div className="preview-tags-inline" ref={containerRef}>
+      <div className="preview-tags-measure" aria-hidden="true">
+        {tags.map((tag) => (
+          <span key={tag.id} className="preview-tag-inline" data-measure-tag>
+            {tag.name}
+          </span>
+        ))}
+        <span className="preview-tag-expand" data-measure-more>
+          +{Math.max(tags.length - 1, 1)} more
+        </span>
+      </div>
+      {shown.map((tag) => (
+        <button
+          key={tag.id}
+          type="button"
+          className="preview-tag-inline"
+          onClick={() => onTagClick?.(tag.name)}
+          title={`Search for "${tag.name}"`}
+        >
+          {tag.name}
+        </button>
+      ))}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="preview-tag-expand"
+          aria-expanded="false"
+          onClick={() => setExpanded(true)}
+          title={`Show ${hiddenCount} more tags`}
+        >
+          +{hiddenCount} more
+        </button>
+      )}
+      {expanded && tags.length > visibleCount && (
+        <button
+          type="button"
+          className="preview-tag-expand"
+          aria-expanded="true"
+          onClick={() => setExpanded(false)}
+          title="Show fewer tags"
+        >
+          Show less
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function PreviewModal({ 
   wallpaper, 
@@ -18,19 +113,29 @@ export function PreviewModal({
   onMarkDownloaded,
   onColorClick,
   onTagClick,
+  onUploaderClick,
+  onResolutionClick,
+  onCategoryClick,
   onSearchSimilar,
   fetchWallpaperDetails,
+  previewPosition = null,
   isLoadingPage = false
 }) {
   const { addToast } = useToast();
   const [tags, setTags] = React.useState([]);
   const [loadingTags, setLoadingTags] = React.useState(false);
   const [useProxy, setUseProxy] = React.useState(true);
-  const [showAllTags, setShowAllTags] = React.useState(false);
   const [uploaderName, setUploaderName] = React.useState(null);
   const [uploaderAvatar, setUploaderAvatar] = React.useState(null);
   const [downloadStatus, setDownloadStatus] = React.useState('idle'); // 'idle', 'downloading', 'error'
+  const [positionFaded, setPositionFaded] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [zoom, setZoom] = React.useState(1);
+  const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const modalRef = React.useRef(null);
+  const imageContainerRef = React.useRef(null);
+  const hoveringContentRef = React.useRef(false);
+  const dragRef = React.useRef(null);
   
   const fullImageUrl = React.useMemo(() => toProxiedFullUrl(wallpaper.url), [wallpaper.url]);
 
@@ -63,7 +168,9 @@ export function PreviewModal({
   React.useEffect(() => {
     const loadTags = async () => {
       setLoadingTags(true);
-      setTags([]); // Clear previous tags
+      setTags([]);
+      setUploaderName(null);
+      setUploaderAvatar(null);
 
       const details = await fetchWallpaperDetails(wallpaper.id);
       if (details && details.tags) {
@@ -89,10 +196,71 @@ export function PreviewModal({
     loadTags();
   }, [wallpaper.id, fetchWallpaperDetails]);
 
+  useEffect(() => {
+    setPositionFaded(false);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return undefined;
+    const timer = window.setTimeout(() => {
+      if (!hoveringContentRef.current) setPositionFaded(true);
+    }, 1150);
+    return () => window.clearTimeout(timer);
+  }, [wallpaper.id, previewPosition?.current, previewPosition?.total]);
+
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [wallpaper.id]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = document.fullscreenElement === imageContainerRef.current;
+      setIsFullscreen(active);
+      if (!active) {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return undefined;
+    const handleWheel = (event) => {
+      if (document.fullscreenElement !== container) return;
+      event.preventDefault();
+      setZoom((current) => {
+        const next = Math.min(8, Math.max(1, current * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+        if (next === 1) setPan({ x: 0, y: 0 });
+        return next;
+      });
+    };
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Escape leaves fullscreen first, then closes the preview on the next press.
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [onClose]);
+
   // Focus trap and keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && hasPrevious) onPrevious();
       if (e.key === 'ArrowRight' && hasNext) onNext();
     };
@@ -141,6 +309,81 @@ export function PreviewModal({
     }
   };
 
+  const handleContentEnter = () => {
+    hoveringContentRef.current = true;
+    setPositionFaded(false);
+  };
+
+  const handleContentLeave = () => {
+    hoveringContentRef.current = false;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduceMotion) setPositionFaded(true);
+  };
+
+  const handleFullscreen = async () => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await container.requestFullscreen();
+      }
+    } catch {
+      addToast('Could not enter fullscreen', 'error', 2000);
+    }
+  };
+
+  const handleImagePointerDown = (event) => {
+    if (!isFullscreen || zoom <= 1) return;
+    dragRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleImagePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    setPan({
+      x: drag.panX + (event.clientX - drag.x),
+      y: drag.panY + (event.clientY - drag.y),
+    });
+  };
+
+  const handleImagePointerUp = () => {
+    dragRef.current = null;
+  };
+
+  const handleImageDoubleClick = () => {
+    if (!isFullscreen) return;
+    if (zoom === 1) {
+      setZoom(2);
+    } else {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+  };
+
+  const handleCopyId = async () => {
+    const value = wallpaper.id;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(value);
+      copied = true;
+    } catch {
+      const input = document.createElement('textarea');
+      input.value = value;
+      input.setAttribute('readonly', '');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.select();
+      copied = document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+
+    addToast(copied ? `Copied ${value}` : 'Could not copy the id', copied ? 'success' : 'error', 2000);
+  };
+
   // Handle favorite toggle with toast
   const handleFavoriteClick = () => {
     onToggleFavorite(wallpaper);
@@ -149,6 +392,21 @@ export function PreviewModal({
   };
 
   if (!wallpaper) return null;
+
+  const uploaderLabel = uploaderName || wallpaper.author;
+  const canSearchUploader = Boolean(uploaderLabel && uploaderLabel !== 'Anonymous');
+  const uploaderContent = (
+    <>
+      {(uploaderAvatar || wallpaper.authorAvatar) && (
+        <img
+          src={uploaderAvatar || wallpaper.authorAvatar}
+          alt=""
+          className="preview-author-avatar"
+        />
+      )}
+      {uploaderLabel}
+    </>
+  );
 
   return (
     <div className="preview-modal-overlay" onClick={onClose}>
@@ -172,7 +430,11 @@ export function PreviewModal({
           </svg>
         </button>
 
-        <div className="preview-content">
+        <div
+          className="preview-content"
+          onMouseEnter={handleContentEnter}
+          onMouseLeave={handleContentLeave}
+        >
           {hasPrevious && (
             <button
               type="button"
@@ -188,6 +450,7 @@ export function PreviewModal({
 
           <div 
             className="preview-image-container"
+            ref={imageContainerRef}
             style={wallpaper.width && wallpaper.height ? { aspectRatio: `${wallpaper.width} / ${wallpaper.height}` } : undefined}
           >
             {!imageLoaded && !imageError && (
@@ -222,11 +485,38 @@ export function PreviewModal({
               key={imageUrl} // Force re-render when URL changes
               src={imageUrl}
               alt={wallpaper.title}
-              className="preview-image"
-              style={{ opacity: imageLoaded ? 1 : 0 }}
+              className={`preview-image${isFullscreen && zoom > 1 ? ' preview-image-pannable' : ''}`}
+              style={{
+                opacity: imageLoaded ? 1 : 0,
+                transform: isFullscreen ? `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` : undefined,
+              }}
               onLoad={handleLoad}
               onError={handleError}
+              onPointerDown={handleImagePointerDown}
+              onPointerMove={handleImagePointerMove}
+              onPointerUp={handleImagePointerUp}
+              onPointerCancel={handleImagePointerUp}
+              onDoubleClick={handleImageDoubleClick}
             />
+            {previewPosition && (
+              <p
+                className={`preview-position${positionFaded ? ' is-faded' : ''}`}
+                aria-live="polite"
+              >
+                {previewPosition.current.toLocaleString()} of {previewPosition.total.toLocaleString()}
+              </p>
+            )}
+            {isFullscreen && (
+              <button
+                type="button"
+                className="preview-fullscreen-exit"
+                onClick={() => {
+                  document.exitFullscreen().catch(() => {});
+                }}
+              >
+                Exit fullscreen
+              </button>
+            )}
           </div>
 
           {hasNext && (
@@ -253,41 +543,44 @@ export function PreviewModal({
         <div className="preview-info">
           <div className="preview-info-row">
             <div className="preview-title-section">
-              <a 
-                href={wallpaper.permalink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="preview-title-link"
-                title="View on Wallhaven"
-              >
-                <h3 className="preview-title">
-                  <span className="preview-id-prefix">#</span>
-                  {wallpaper.id}
-                </h3>
-              </a>
-              {/* Tags inline with title */}
-              {tags.length > 0 && (
-                <div className="preview-tags-inline">
-                  {(showAllTags ? tags : tags.slice(0, 10)).map((tag) => (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      className="preview-tag-inline"
-                      onClick={() => onTagClick?.(tag.name)}
-                      title={`Search for "${tag.name}"`}
-                    >
-                      {tag.name}
-                    </button>
-                  ))}
-                  {tags.length > 10 && (
-                    <button
-                      type="button"
-                      className="preview-tag-expand"
-                      onClick={() => setShowAllTags(!showAllTags)}
-                      title={showAllTags ? 'Show less tags' : `Show ${tags.length - 10} more tags`}
-                    >
-                      {showAllTags ? '← Less' : `+${tags.length - 10} more`}
-                    </button>
+              <div className="preview-title-line">
+                <a 
+                  href={wallpaper.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="preview-title-link"
+                  title="View on Wallhaven"
+                >
+                  <h3 className="preview-title">
+                    <span className="preview-id-prefix">#</span>
+                    {wallpaper.id}
+                  </h3>
+                </a>
+                <button
+                  type="button"
+                  className="preview-id-copy"
+                  onClick={handleCopyId}
+                  aria-label={`Copy wallpaper id ${wallpaper.id}`}
+                  title="Copy id"
+                >
+                  <svg className="preview-id-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              {(loadingTags || tags.length > 0) && (
+                <div className="preview-tags-section">
+                  <h4 className="preview-section-label">Tags</h4>
+                  {loadingTags && tags.length === 0 ? (
+                    <div className="preview-tags-inline preview-tags-loading" aria-hidden="true">
+                      <span className="preview-tag-placeholder" />
+                      <span className="preview-tag-placeholder" />
+                      <span className="preview-tag-placeholder" />
+                      <span className="preview-tag-placeholder" />
+                    </div>
+                  ) : (
+                    <PreviewTags key={wallpaper.id} tags={tags} onTagClick={onTagClick} />
                   )}
                 </div>
               )}
@@ -343,6 +636,31 @@ export function PreviewModal({
                   </svg>
                 )}
               </button>
+              <button
+                type="button"
+                className="preview-action-button preview-action-fullscreen"
+                onClick={handleFullscreen}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'View fullscreen'}
+                title={isFullscreen ? 'Exit fullscreen' : 'View fullscreen'}
+              >
+                <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {isFullscreen ? (
+                    <>
+                      <polyline points="4 14 10 14 10 20"></polyline>
+                      <polyline points="20 10 14 10 14 4"></polyline>
+                      <line x1="14" y1="10" x2="21" y2="3"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </>
+                  ) : (
+                    <>
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <polyline points="9 21 3 21 3 15"></polyline>
+                      <line x1="21" y1="3" x2="14" y2="10"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </>
+                  )}
+                </svg>
+              </button>
               <a
                 href={wallpaper.permalink}
                 target="_blank"
@@ -375,12 +693,19 @@ export function PreviewModal({
             </div>
           </div>
 
-          <div className="preview-metadata">
+          <div className="preview-properties">
+            <h4 className="preview-section-label">Properties</h4>
+            <div className="preview-metadata">
             <div className="preview-meta-item">
               <span className="preview-meta-label">Resolution</span>
-              <span className="preview-meta-value">
+              <button
+                type="button"
+                className="preview-meta-value preview-meta-button"
+                onClick={() => onResolutionClick?.(wallpaper.width, wallpaper.height)}
+                title={`Filter by ${wallpaper.width} × ${wallpaper.height}`}
+              >
                 {wallpaper.width} × {wallpaper.height}
-              </span>
+              </button>
               {wallpaper.ratio && (
                 <span className="preview-meta-secondary">({wallpaper.ratio}:1)</span>
               )}
@@ -402,21 +727,30 @@ export function PreviewModal({
             
             <div className="preview-meta-item">
               <span className="preview-meta-label">Uploader</span>
-              <span className="preview-meta-value">
-                {(uploaderAvatar || wallpaper.authorAvatar) && (
-                  <img 
-                    src={uploaderAvatar || wallpaper.authorAvatar} 
-                    alt={uploaderName || wallpaper.author}
-                    className="preview-author-avatar"
-                  />
-                )}
-                {uploaderName || wallpaper.author}
-              </span>
+              {canSearchUploader ? (
+                <button
+                  type="button"
+                  className="preview-meta-value preview-meta-button preview-meta-button-uploader"
+                  onClick={() => onUploaderClick?.(uploaderLabel)}
+                  title={`Search for @${uploaderLabel}`}
+                >
+                  {uploaderContent}
+                </button>
+              ) : (
+                <span className="preview-meta-value preview-meta-uploader">{uploaderContent}</span>
+              )}
             </div>
             
             <div className="preview-meta-item">
               <span className="preview-meta-label">Category</span>
-              <span className="preview-meta-value">{wallpaper.category}</span>
+              <button
+                type="button"
+                className="preview-meta-value preview-meta-button"
+                onClick={() => onCategoryClick?.(wallpaper.category)}
+                title={`Show ${wallpaper.category} wallpapers`}
+              >
+                {wallpaper.category}
+              </button>
             </div>
             
             <div className="preview-meta-item">
@@ -463,6 +797,7 @@ export function PreviewModal({
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
