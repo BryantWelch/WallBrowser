@@ -183,6 +183,7 @@ export const STORAGE_KEYS = {
   VIEW_MODE_MOBILE: 'wallhaven-view-mode-mobile',
   DOWNLOADED: 'wallhaven-downloaded',
   DOWNLOADED_DATA: 'wallhaven-downloaded-data',
+  CATALOG_STATS: 'wallhaven-catalog-stats',
 };
 
 export const API_CONFIG = {

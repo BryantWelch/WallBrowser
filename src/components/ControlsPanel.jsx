@@ -3,6 +3,7 @@ import { DEFAULT_FILTERS } from '../constants';
 import { formatHistoryTime } from '../hooks/useSearchHistory';
 import {
   AspectRatioMenu,
+  CategoryMenu,
   ColorMenu,
   FileTypeMenu,
   FilterMenuProvider,
@@ -240,12 +241,16 @@ export function ControlsPanel({
           </button>
           <button
             type="button"
-            className="secondary-button clear-filters-button"
-            onClick={onClearFilters}
-            aria-label="Clear all filters"
-            disabled={isClearDisabled}
+            className="secondary-button settings-button"
+            onClick={onOpenSettings}
+            aria-label="Open API key and content settings"
+            title="API Key & Content Settings"
           >
-            Clear
+            <svg className="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            Settings
           </button>
         </div>
       </div>
@@ -331,6 +336,17 @@ export function ControlsPanel({
           />
         </div>
 
+        <div className="control-item control-item-categories">
+          <label htmlFor="categories">
+            Categories
+            {isCategoriesActive && <span className="filter-active-indicator">*</span>}
+          </label>
+          <CategoryMenu
+            categories={filters.categories}
+            onChange={(updateCategories) => onFilterChange('categories', updateCategories)}
+          />
+        </div>
+
         {/* View Mode (layout preference, not part of filter asterisk logic) */}
         <div className="control-item control-item-view">
           <label htmlFor="viewMode">View</label>
@@ -351,71 +367,6 @@ export function ControlsPanel({
 
       </div>
       </FilterMenuProvider>
-
-      {/* Content filters row */}
-      <div className="controls-content-row">
-        <div className="content-filters-group">
-          <label className="content-filters-label">Categories</label>
-          <div className="categories-group">
-            <label className="category-checkbox">
-              <input
-                type="checkbox"
-                checked={filters.categories.general}
-                onChange={(e) =>
-                  onFilterChange('categories', {
-                    ...filters.categories,
-                    general: e.target.checked,
-                  })
-                }
-                aria-label="General category"
-              />
-              <span>General</span>
-            </label>
-            <label className="category-checkbox">
-              <input
-                type="checkbox"
-                checked={filters.categories.anime}
-                onChange={(e) =>
-                  onFilterChange('categories', {
-                    ...filters.categories,
-                    anime: e.target.checked,
-                  })
-                }
-                aria-label="Anime category"
-              />
-              <span>Anime</span>
-            </label>
-            <label className="category-checkbox">
-              <input
-                type="checkbox"
-                checked={filters.categories.people}
-                onChange={(e) =>
-                  onFilterChange('categories', {
-                    ...filters.categories,
-                    people: e.target.checked,
-                  })
-                }
-                aria-label="People category"
-              />
-              <span>People</span>
-            </label>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="secondary-button settings-button"
-          onClick={onOpenSettings}
-          aria-label="Open API key and content settings"
-          title="API Key & Content Settings"
-        >
-          <svg className="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-          Settings
-        </button>
-      </div>
 
       {error && (
         <div className="error-banner" role="alert">

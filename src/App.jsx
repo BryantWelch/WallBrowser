@@ -17,9 +17,83 @@ import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
 import { clearCache, buildSimilarFilters } from './utils';
 import { prefetchImage, toProxiedFullUrl, downloadWallpaperBlob, createWallpapersZip } from './utils/imageUtils';
-import { getStoredApiKey } from './utils/apiKeyStorage';
 import { ToastContainer } from './components/Toast';
 import { useToast } from './context/ToastContext';
+
+const HEADER_STATS = [
+  { key: 'wallpapers', label: 'Wallpapers', title: 'Total wallpapers' },
+  { key: 'views', label: 'Views', title: 'Total wallpaper views' },
+  { key: 'tags', label: 'Tags', title: 'Total tags' },
+  { key: 'users', label: 'Users', title: 'Total users' },
+];
+
+function parseCount(text) {
+  const value = Number(String(text).replace(/,/g, '').trim());
+  return Number.isFinite(value) ? value : null;
+}
+
+function parseDayMonth(text) {
+  const [today, month] = String(text).split('/').map(parseCount);
+  return { today: today ?? null, month: month ?? null };
+}
+
+function parseWallhavenStats(html) {
+  const sections = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>\s*<dl class="datalist">(.*?)<\/dl>/g)];
+  const byName = {};
+  sections.forEach(([, heading, body]) => {
+    const name = heading.replace(/<[^>]+>/g, '').trim();
+    const rows = [...body.matchAll(/<dt>(.*?)<\/dt>\s*<dd>(.*?)<\/dd>/g)].map(([, label, value]) => ({
+      label: label.replace(/<[^>]+>/g, '').trim(),
+      value: value.replace(/<[^>]+>/g, '').trim(),
+    }));
+    byName[name] = rows;
+  });
+
+  const row = (section, label) => byName[section]?.find((item) => item.label === label)?.value;
+  const wallNew = parseDayMonth(row('Wallpapers', 'New this day/month') || '');
+  const tagNew = parseDayMonth(row('Tags', 'New this day/month') || '');
+  const userNew = parseDayMonth(row('Users', 'New this day/month') || '');
+  const userActive = parseDayMonth(row('Users', 'Active this day/month') || '');
+
+  return {
+    wallpapers: { total: parseCount(row('Wallpapers', 'Total Wallpapers')), ...wallNew },
+    views: { total: parseCount(row('Wallpapers', 'Total Views')) },
+    tags: { total: parseCount(row('Tags', 'Total Tags')), ...tagNew },
+    users: {
+      total: parseCount(row('Users', 'Total Users')),
+      ...userNew,
+      activeToday: userActive.today,
+      activeMonth: userActive.month,
+    },
+  };
+}
+
+function formatCatalogCount(value, compact) {
+  if (value == null) return '—';
+  if (compact || value >= 1000000000) {
+    if (value >= 1000000000) {
+      const billions = value / 1000000000;
+      return `${billions >= 10 ? Math.round(billions) : billions.toFixed(2)}B`;
+    }
+    if (value >= 1000000) {
+      const millions = value / 1000000;
+      return `${millions >= 10 ? Math.round(millions) : millions.toFixed(1)}M`;
+    }
+    if (value >= 1000) return `${Math.round(value / 1000)}K`;
+  }
+  return value.toLocaleString();
+}
+
+const CATALOG_STATS_MAX_AGE = 30 * 60 * 1000;
+
+function catalogStatTitle(stat, data) {
+  if (data?.total == null) return stat.title;
+  const parts = [`${stat.title}: ${data.total.toLocaleString()}`];
+  if (data.today != null) parts.push(`${data.today.toLocaleString()} new today`);
+  if (data.month != null) parts.push(`${data.month.toLocaleString()} this month`);
+  if (data.activeToday != null) parts.push(`${data.activeToday.toLocaleString()} active today`);
+  return parts.join('. ');
+}
 
 function App() {
   const { addToast } = useToast();
@@ -31,39 +105,32 @@ function App() {
   const viewMode = portraitPhone ? mobileViewMode : desktopViewMode;
   const setViewMode = portraitPhone ? setMobileViewMode : setDesktopViewMode;
   
-  // Clear cache on mount and fetch total wallpapers count
+  // Clear the wallpaper request cache on mount. Header stats are stored separately.
   useEffect(() => {
     clearCache();
-    
-    // Fetch total wallpapers count from Wallhaven
+
+    const savedAt = catalogCache?.savedAt;
+    const hasStats = catalogCache?.stats?.wallpapers?.total != null;
+    if (hasStats && savedAt && Date.now() - savedAt < CATALOG_STATS_MAX_AGE) return;
+
+    let cancelled = false;
     const fetchTotalCount = async () => {
       try {
-        // Get API key if available (needed for Sketchy/NSFW content)
-        const apiKey = getStoredApiKey();
-        
-        // Query ALL wallpapers: all categories (111) and all purity levels (111)
-        // categories: general=1, anime=1, people=1 (binary: 111)
-        // purity: SFW=1, Sketchy=1, NSFW=1 (binary: 111)
-        // Note: Sketchy/NSFW require API key
-        let url = '/api/wallhaven/api/v1/search?categories=111&purity=111&page=1';
-        if (apiKey) {
-          url += `&apikey=${apiKey}`;
-        }
-        
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.meta?.total) {
-            setTotalWallpapers(data.meta.total);
-          }
-        }
+        const response = await fetch('/api/wallhaven/stats');
+        if (!response.ok || cancelled) return;
+        const html = await response.text();
+        const stats = parseWallhavenStats(html);
+        if (cancelled || stats?.wallpapers?.total == null) return;
+        setCatalogCache({ savedAt: Date.now(), stats });
       } catch (error) {
-        console.error('Failed to fetch total wallpapers:', error);
-        // Don't show count if API call fails
+        console.error('Failed to fetch Wallhaven stats:', error);
       }
     };
-    
+
     fetchTotalCount();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   
   // API and data management
@@ -108,8 +175,9 @@ function App() {
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   
-  // Total wallpapers in Wallhaven database
-  const [totalWallpapers, setTotalWallpapers] = useState(null);
+  // Header stats, kept locally so a reload can show the last counts immediately.
+  const [catalogCache, setCatalogCache] = useLocalStorage(STORAGE_KEYS.CATALOG_STATS, null);
+  const catalogStats = catalogCache?.stats ?? null;
 
   // Download status state
   const [downloadStatus, setDownloadStatus] = useState('idle'); // 'idle', 'downloading', 'zipping', 'success', 'error'
@@ -143,7 +211,7 @@ function App() {
   const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({
       ...prev,
-      [key]: value
+      [key]: typeof value === 'function' ? value(prev[key]) : value
     }));
     setHasPendingFilterChanges(true);
     // Reset to page 1, but don't fetch (user must click Fetch button)
@@ -924,23 +992,32 @@ function App() {
                 <rect x="50" y="20" width="30" height="50" rx="3" fill="white" opacity="1" />
                 <rect x="20" y="75" width="60" height="5" rx="2" fill="white" opacity="0.7" />
               </svg>
-              <h1>WallBrowser</h1>
+              <div className="header-title-copy">
+                <h1>WallBrowser</h1>
+                <p className="app-subtitle">A modern wallpaper browser for Wallhaven</p>
+              </div>
+              <div className="app-header-right" aria-label="Wallhaven statistics">
+                {HEADER_STATS.map((stat) => {
+                  const data = catalogStats?.[stat.key];
+                  return (
+                    <a
+                      key={stat.key}
+                      href="https://wallhaven.cc/stats"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="header-stats"
+                      title={catalogStatTitle(stat, data)}
+                    >
+                      <span className="header-stat-number">
+                        <span className="header-stat-full">{formatCatalogCount(data?.total, false)}</span>
+                        <span className="header-stat-compact">{formatCatalogCount(data?.total, true)}</span>
+                      </span>
+                      <span className="header-stat-label">{stat.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-            <p className="app-subtitle">A modern wallpaper browser for Wallhaven</p>
-          </div>
-          <div className="app-header-right">
-            {totalWallpapers && (
-              <a
-                href="https://wallhaven.cc/stats"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="header-stats header-stats-total"
-                title="View detailed Wallhaven stats. Add API key in Settings for full access."
-              >
-                <span className="header-stat-number">{totalWallpapers.toLocaleString()}</span>
-                <span className="header-stat-label">Wallpapers</span>
-              </a>
-            )}
           </div>
         </div>
       </header>

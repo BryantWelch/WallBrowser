@@ -21,7 +21,7 @@ export function FilterMenuProvider({ children }) {
   );
 }
 
-function FilterMenu({ id, ariaLabel, disabled, menuClassName, menuMaxHeight = 360, trigger, header, footer, children }) {
+function FilterMenu({ id, ariaLabel, disabled, menuClassName, menuMaxHeight = 360, multi = false, trigger, header, footer, children }) {
   const menuContext = useContext(FilterMenuContext);
   const open = menuContext?.openId === id;
   const rootRef = useRef(null);
@@ -168,6 +168,7 @@ function FilterMenu({ id, ariaLabel, disabled, menuClassName, menuMaxHeight = 36
           <div
             className="filter-menu-list"
             role="listbox"
+            aria-multiselectable={multi || undefined}
             aria-label={ariaLabel}
             onKeyDown={onListKeyDown}
           >
@@ -760,6 +761,46 @@ export function FileTypeMenu({ value, onChange }) {
           <OptionCopy label={option.label} detail={FILE_DETAILS[option.value]} />
         </MenuOption>
       ))}
+    </FilterMenu>
+  );
+}
+
+const CATEGORY_OPTIONS = [
+  { key: 'general', label: 'General' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'people', label: 'People' },
+];
+
+export function CategoryMenu({ categories, onChange }) {
+  const selected = CATEGORY_OPTIONS.filter((option) => categories?.[option.key]);
+  const triggerLabel = selected.length === 0
+    ? 'None'
+    : selected.length === CATEGORY_OPTIONS.length
+      ? 'All'
+      : selected.map((option) => option.label).join(', ');
+
+  return (
+    <FilterMenu
+      id="categories"
+      ariaLabel="Categories"
+      menuClassName="filter-menu-categories"
+      multi
+      trigger={<span>{triggerLabel}</span>}
+    >
+      {CATEGORY_OPTIONS.map((option) => {
+        const checked = !!categories?.[option.key];
+        return (
+          <MenuOption
+            key={option.key}
+            keepOpen
+            selected={checked}
+            onSelect={() => onChange((current) => ({ ...current, [option.key]: !current?.[option.key] }))}
+          >
+            <span className={`category-check${checked ? ' is-checked' : ''}`} aria-hidden="true" />
+            <OptionCopy label={option.label} />
+          </MenuOption>
+        );
+      })}
     </FilterMenu>
   );
 }
