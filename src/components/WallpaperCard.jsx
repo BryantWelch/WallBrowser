@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { formatFileSize, getFavoriteToast } from '../utils';
 import { getColorName, VIEW_MODES } from '../constants';
+import { usePortraitPhone } from './FilterMenu';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
 import { IMAGE_RETRY_CONFIG, downloadWallpaperBlob } from '../utils/imageUtils';
@@ -30,8 +31,15 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     handleError,
   } = useImageWithRetry(wallpaper.thumbUrl, IMAGE_RETRY_CONFIG);
 
+  const portraitPhone = usePortraitPhone();
   const label = useMemo(() => `${wallpaper.width}×${wallpaper.height}`, [wallpaper.width, wallpaper.height]);
-  const formattedFileSize = useMemo(() => wallpaper.fileSize > 0 ? formatFileSize(wallpaper.fileSize) : null, [wallpaper.fileSize]);
+  const formattedFileSize = useMemo(() => {
+    if (!(wallpaper.fileSize > 0)) return null;
+    const precise = formatFileSize(wallpaper.fileSize);
+    const wholeKilobytes = portraitPhone && viewMode === VIEW_MODES.COMFORTABLE && precise.endsWith(' KB');
+    if (!wholeKilobytes) return precise;
+    return `${Math.round(parseFloat(precise))} KB`;
+  }, [wallpaper.fileSize, portraitPhone, viewMode]);
   const formattedViews = useMemo(() => (wallpaper.views || 0).toLocaleString(), [wallpaper.views]);
   const formattedFavorites = useMemo(() => (wallpaper.ups || 0).toLocaleString(), [wallpaper.ups]);
   const fileTypeLabel = useMemo(() => wallpaper.fileType === 'image/png' ? 'PNG' : 'JPEG', [wallpaper.fileType]);
@@ -175,14 +183,18 @@ export const WallpaperCard = React.memo(function WallpaperCard({
           >
             {label}
           </button>
-          {formattedFileSize && (
-            <span className="wallpaper-pill" title={`File size: ${formattedFileSize}`}>
-              {formattedFileSize}
-            </span>
-          )}
-          {wallpaper.fileType && (
-            <span className="wallpaper-pill" title={`Image format: ${fileTypeLabel}`}>
-              {fileTypeLabel}
+          {(formattedFileSize || wallpaper.fileType) && (
+            <span className="wallpaper-pill-pair">
+              {formattedFileSize && (
+                <span className="wallpaper-pill" title={`File size: ${formattedFileSize}`}>
+                  {formattedFileSize}
+                </span>
+              )}
+              {wallpaper.fileType && (
+                <span className="wallpaper-pill" title={`Image format: ${fileTypeLabel}`}>
+                  {fileTypeLabel}
+                </span>
+              )}
             </span>
           )}
         </div>

@@ -142,9 +142,10 @@ export function formatFileSize(bytes) {
 }
 
 /**
- * Format a date string as relative time (e.g., "2 hours ago", "3 days ago")
+ * Format a date string as relative time (e.g., "2 hours ago", "3 days ago").
+ * Compact form is for narrow layouts: "2 hr ago", "23 min ago".
  */
-export function formatRelativeDate(dateString) {
+export function formatRelativeDate(dateString, { compact = false } = {}) {
   if (!dateString) return '';
   
   const date = new Date(dateString);
@@ -159,6 +160,14 @@ export function formatRelativeDate(dateString) {
   const diffYears = Math.floor(diffDays / 365);
   
   if (diffSeconds < 60) return 'just now';
+  if (compact) {
+    if (diffMinutes < 60) return `${diffMinutes} min ago`;
+    if (diffHours < 24) return `${diffHours} hr ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    if (diffWeeks < 4) return `${diffWeeks} wk ago`;
+    if (diffMonths < 12) return `${diffMonths} mo ago`;
+    return `${diffYears} yr ago`;
+  }
   if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
   if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
   if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;

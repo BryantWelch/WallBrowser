@@ -1,5 +1,23 @@
 import React from 'react';
 
+const NARROW_PAGINATION_QUERY = '(max-width: 640px)';
+
+function useNarrowPagination() {
+  const [matches, setMatches] = React.useState(() => (
+    typeof window !== 'undefined' && window.matchMedia(NARROW_PAGINATION_QUERY).matches
+  ));
+
+  React.useEffect(() => {
+    const media = window.matchMedia(NARROW_PAGINATION_QUERY);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  return matches;
+}
+
 export function PaginationBar({ 
   currentPage, 
   totalPages, 
@@ -12,6 +30,7 @@ export function PaginationBar({
   canGoPrevious
 }) {
   const paginationRef = React.useRef(null);
+  const narrow = useNarrowPagination();
   const CHUNK_SIZE = 100; // Progressive navigation chunk size
   
   // Reset scroll position when page changes
@@ -33,10 +52,11 @@ export function PaginationBar({
     if (!totalPages || totalPages <= 1) return null;
 
     const buttons = [];
-    const maxToShow = 5;
+    const maxToShow = narrow ? 3 : 5;
+    const side = Math.floor((maxToShow - 1) / 2);
 
     // Show pages around current page
-    let start = Math.max(1, currentPage - 2);
+    let start = Math.max(1, currentPage - side);
     let end = Math.min(totalPages, start + maxToShow - 1);
 
     if (end - start < maxToShow - 1) {
@@ -63,8 +83,8 @@ export function PaginationBar({
       );
     };
 
-    // Show first page if not visible
-    if (start > 1) {
+    // On a wide screen, keep a shortcut back to the first page.
+    if (!narrow && start > 1) {
       pushPageButton(1);
       if (start > 2) {
         buttons.push(
@@ -80,14 +100,24 @@ export function PaginationBar({
     }
 
     // Show progressive "last" page (next chunk boundary)
-    if (showProgressiveLast && end < displayedNextChunk) {
-      if (end < displayedNextChunk - 1) {
-        buttons.push(
-          <span key="end-ellipsis" className="page-ellipsis" aria-hidden="true">
-            …
-          </span>
-        );
+    // Phone: three nearby pages, then the next jump (100, 200, …).
+    if (narrow) {
+      if (displayedNextChunk > end) {
+        if (displayedNextChunk > end + 1) {
+          buttons.push(
+            <span key="end-ellipsis" className="page-ellipsis" aria-hidden="true">
+              …
+            </span>
+          );
+        }
+        pushPageButton(displayedNextChunk);
       }
+    } else if (showProgressiveLast && end < displayedNextChunk) {
+      buttons.push(
+        <span key="end-ellipsis" className="page-ellipsis" aria-hidden="true">
+          …
+        </span>
+      );
       pushPageButton(displayedNextChunk);
     }
 

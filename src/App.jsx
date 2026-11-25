@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ControlsPanel } from './components/ControlsPanel';
+import { usePortraitPhone } from './components/FilterMenu';
 import { WallpaperGrid } from './components/WallpaperGrid';
 import { PaginationBar } from './components/PaginationBar';
 import { PreviewModal } from './components/PreviewModal';
@@ -24,7 +25,11 @@ function App() {
   const { addToast } = useToast();
   // Always start with default filters - no persistence
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [viewMode, setViewMode] = useLocalStorage(STORAGE_KEYS.VIEW_MODE, VIEW_MODES.COMFORTABLE);
+  const [desktopViewMode, setDesktopViewMode] = useLocalStorage(STORAGE_KEYS.VIEW_MODE, VIEW_MODES.COMFORTABLE);
+  const [mobileViewMode, setMobileViewMode] = useLocalStorage(STORAGE_KEYS.VIEW_MODE_MOBILE, VIEW_MODES.CINEMATIC);
+  const portraitPhone = usePortraitPhone();
+  const viewMode = portraitPhone ? mobileViewMode : desktopViewMode;
+  const setViewMode = portraitPhone ? setMobileViewMode : setDesktopViewMode;
   
   // Clear cache on mount and fetch total wallpapers count
   useEffect(() => {

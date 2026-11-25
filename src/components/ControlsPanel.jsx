@@ -1,15 +1,15 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import {
-  RESOLUTION_PRESETS,
-  COLOR_OPTIONS,
-  SORT_OPTIONS,
-  TIME_RANGE_OPTIONS,
-  ASPECT_RATIO_OPTIONS,
-  VIEW_MODES,
-  FILE_TYPE_OPTIONS,
-  DEFAULT_FILTERS,
-} from '../constants';
+import React, { useState, useRef, useEffect } from 'react';
+import { DEFAULT_FILTERS } from '../constants';
 import { formatHistoryTime } from '../hooks/useSearchHistory';
+import {
+  AspectRatioMenu,
+  ColorMenu,
+  FileTypeMenu,
+  FilterMenuProvider,
+  ResolutionMenu,
+  SortMenu,
+  ViewMenu,
+} from './FilterMenu';
 
 export function ControlsPanel({
   filters,
@@ -30,82 +30,11 @@ export function ControlsPanel({
   onRemoveHistory,
   onClearHistory,
 }) {
-  const filteredResolutionPresets = useMemo(() => {
-    if (!filters.ratio) {
-      // When showing all resolutions, add separators between aspect ratio groups
-      const withSeparators = [];
-      let lastRatio = null;
-      
-      const ratioLabels = {
-        '16x9': '─── 16:9 Widescreen ───',
-        '16x10': '─── 16:10 ───',
-        '21x9': '─── 21:9 Ultrawide ───',
-        '32x9': '─── 32:9 Super Ultrawide ───',
-        '48x9': '─── 48:9 Triple Monitor ───',
-        '9x16': '─── 9:16 Portrait ───',
-        '10x16': '─── 10:16 Portrait ───',
-        '9x18': '─── 9:18 Portrait ───',
-        '1x1': '─── 1:1 Square ───',
-        '3x2': '─── 3:2 ───',
-        '4x3': '─── 4:3 ───',
-        '5x4': '─── 5:4 ───',
-      };
-      
-      RESOLUTION_PRESETS.forEach((preset) => {
-        if (preset.ratio !== lastRatio) {
-          withSeparators.push({ 
-            isSeparator: true, 
-            label: ratioLabels[preset.ratio] || preset.ratio,
-            value: `sep-${preset.ratio}`
-          });
-          lastRatio = preset.ratio;
-        }
-        withSeparators.push(preset);
-      });
-      
-      return withSeparators;
-    }
-    return RESOLUTION_PRESETS.filter((preset) => preset.ratio === filters.ratio);
-  }, [filters.ratio]);
-
   const [showSearchHints, setShowSearchHints] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const searchHintsRef = useRef(null);
   const searchButtonRef = useRef(null);
   
-  // Detect user's display resolution
-  const userDisplay = useMemo(() => {
-    if (typeof window === 'undefined') return null;
-    
-    const width = Math.round(window.screen.width * (window.devicePixelRatio || 1));
-    const height = Math.round(window.screen.height * (window.devicePixelRatio || 1));
-    
-    // Calculate aspect ratio
-    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-    const divisor = gcd(width, height);
-    const ratioW = width / divisor;
-    const ratioH = height / divisor;
-    
-    // Map to common aspect ratio format for Wallhaven API
-    let apiRatio = '';
-    const ratio = width / height;
-    if (Math.abs(ratio - 16/9) < 0.1) apiRatio = '16x9';
-    else if (Math.abs(ratio - 16/10) < 0.1) apiRatio = '16x10';
-    else if (Math.abs(ratio - 21/9) < 0.1) apiRatio = '21x9';
-    else if (Math.abs(ratio - 32/9) < 0.1) apiRatio = '32x9';
-    else if (Math.abs(ratio - 4/3) < 0.1) apiRatio = '4x3';
-    else if (Math.abs(ratio - 5/4) < 0.1) apiRatio = '5x4';
-    else if (Math.abs(ratio - 3/2) < 0.1) apiRatio = '3x2';
-    
-    return {
-      width,
-      height,
-      value: `${width}x${height}`,
-      label: `🖥 My Display (${width}×${height})`,
-      ratioLabel: `${ratioW}:${ratioH}`,
-      apiRatio
-    };
-  }, []);
   const historyRef = useRef(null);
   const historyButtonRef = useRef(null);
 
@@ -115,17 +44,12 @@ export function ControlsPanel({
     filters.resolution !== DEFAULT_FILTERS.resolution ||
     filters.exactResolution !== DEFAULT_FILTERS.exactResolution;
   const isSortActive = filters.sort !== DEFAULT_FILTERS.sort;
-  const isTopRangeActive =
-    filters.sort === 'toplist' && filters.timeRange !== DEFAULT_FILTERS.timeRange;
   const isColorActive = filters.color !== DEFAULT_FILTERS.color;
   const isFileTypeActive = filters.fileType !== DEFAULT_FILTERS.fileType;
   const isCategoriesActive =
     filters.categories.general !== DEFAULT_FILTERS.categories.general ||
     filters.categories.anime !== DEFAULT_FILTERS.categories.anime ||
     filters.categories.people !== DEFAULT_FILTERS.categories.people;
-
-  const hasCustomResolution =
-    !!filters.resolution && !RESOLUTION_PRESETS.some((p) => p.value === filters.resolution);
 
   // Close search hints when clicking outside
   useEffect(() => {
@@ -302,7 +226,7 @@ export function ControlsPanel({
           )}
         </div>
         
-        <div className="control-item control-item-button">
+        <div className="search-actions">
           <button
             className={`primary-button ${
               hasPendingFilterChanges && !isLoading ? 'primary-button-pending' : ''
@@ -314,10 +238,20 @@ export function ControlsPanel({
           >
             {isLoading ? 'Loading…' : 'Fetch wallpapers'}
           </button>
+          <button
+            type="button"
+            className="secondary-button clear-filters-button"
+            onClick={onClearFilters}
+            aria-label="Clear all filters"
+            disabled={isClearDisabled}
+          >
+            Clear
+          </button>
         </div>
       </div>
 
       {/* Filters row */}
+      <FilterMenuProvider>
       <div className="controls-filters-row">
         {/* Aspect ratio */}
         <div className="control-item control-item-ratio">
@@ -325,36 +259,13 @@ export function ControlsPanel({
             Aspect ratio
             {isRatioActive && <span className="filter-active-indicator">*</span>}
           </label>
-          <select
-            id="ratio"
+          <AspectRatioMenu
             value={filters.ratio}
-            onChange={(e) => {
-              const newRatio = e.target.value;
-              if (newRatio === '') {
-                // When manually setting to "Any", keep current resolution
-                onFilterChange('ratio', newRatio);
-              } else {
-                // When selecting a specific ratio, clear resolution so dropdown filters
-                onMultipleFilterChanges?.({
-                  ratio: newRatio,
-                  resolution: ''
-                });
-              }
+            onChange={(nextRatio) => {
+              if (nextRatio === '') onFilterChange('ratio', '');
+              else onMultipleFilterChanges?.({ ratio: nextRatio, resolution: '' });
             }}
-            aria-label="Aspect ratio"
-          >
-            <option value="">Any</option>
-            {['Wide', 'Portrait', 'Square & Other'].map((group) => (
-              <React.Fragment key={group}>
-                <option disabled className="resolution-separator">─── {group} ───</option>
-                {ASPECT_RATIO_OPTIONS.filter((o) => o.group === group).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </React.Fragment>
-            ))}
-          </select>
+          />
         </div>
 
         {/* Resolution */}
@@ -363,77 +274,24 @@ export function ControlsPanel({
             Resolution
             {isResolutionActive && <span className="filter-active-indicator">*</span>}
           </label>
-          <div className="control-with-addon">
-            <select
-              id="resolution"
-              value={filters.resolution}
-              onChange={(e) => {
-                const selectedResolution = e.target.value;
-                if (selectedResolution) {
-                  // Check if it's the user's display resolution
-                  if (selectedResolution === userDisplay?.value) {
-                    onMultipleFilterChanges?.({
-                      resolution: selectedResolution,
-                      ratio: userDisplay.apiRatio || ''
-                    });
-                  } else {
-                    // Find the ratio for this resolution
-                    const preset = RESOLUTION_PRESETS.find(p => p.value === selectedResolution);
-                    if (preset && preset.ratio) {
-                      // Auto-set aspect ratio based on resolution
-                      onMultipleFilterChanges?.({
-                        resolution: selectedResolution,
-                        ratio: preset.ratio
-                      });
-                    } else {
-                      onFilterChange('resolution', selectedResolution);
-                    }
-                  }
-                } else {
-                  // Clearing resolution
-                  onFilterChange('resolution', '');
-                }
-              }}
-              aria-label="Minimum resolution"
-            >
-              <option value="">Any</option>
-              {userDisplay && (!filters.ratio || filters.ratio === userDisplay.apiRatio) && (
-                <>
-                  <option disabled className="resolution-separator">─── My Display ───</option>
-                  <option value={userDisplay.value}>
-                    {userDisplay.width}×{userDisplay.height}
-                  </option>
-                </>
-              )}
-              {hasCustomResolution && (
-                <>
-                  <option disabled className="resolution-separator">─── Custom ───</option>
-                  <option value={filters.resolution}>{filters.resolution.replace('x', '×')}</option>
-                </>
-              )}
-              {filteredResolutionPresets.map((preset) => (
-                <option 
-                  key={preset.value} 
-                  value={preset.value}
-                  disabled={preset.isSeparator}
-                  className={preset.isSeparator ? 'resolution-separator' : ''}
-                >
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-            <label className="checkbox-addon">
-              <input
-                type="checkbox"
-                checked={filters.exactResolution}
-                onChange={(e) =>
-                  onFilterChange('exactResolution', e.target.checked)
-                }
-                aria-label="Exact resolution match"
-              />
-              <span>Exact</span>
-            </label>
-          </div>
+          <ResolutionMenu
+            value={filters.resolution}
+            ratio={filters.ratio}
+            exact={filters.exactResolution}
+            onExactChange={(nextExact) => onFilterChange('exactResolution', nextExact)}
+            onChange={(nextResolution, nextRatio) => {
+              if (!nextResolution) {
+                if (nextRatio) onMultipleFilterChanges?.({ resolution: '', ratio: nextRatio });
+                else onFilterChange('resolution', '');
+                return;
+              }
+              if (nextRatio !== undefined) {
+                onMultipleFilterChanges?.({ resolution: nextResolution, ratio: nextRatio || '' });
+                return;
+              }
+              onFilterChange('resolution', nextResolution);
+            }}
+          />
         </div>
 
         {/* Sort */}
@@ -442,43 +300,14 @@ export function ControlsPanel({
             Sort
             {isSortActive && <span className="filter-active-indicator">*</span>}
           </label>
-          <select
-            id="sort"
+          <SortMenu
             value={filters.sort}
-            onChange={(e) => onFilterChange('sort', e.target.value)}
-            aria-label="Sort order"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Top range - always visible, disabled unless sort is Top */}
-        <div
-          className={`control-item control-item-toprange ${
-            filters.sort === 'toplist' ? 'control-item-toprange-active' : ''
-          }`}
-        >
-          <label htmlFor="timeRange">
-            Top range
-            {isTopRangeActive && <span className="filter-active-indicator">*</span>}
-          </label>
-          <select
-            id="timeRange"
-            value={filters.timeRange}
-            onChange={(e) => onFilterChange('timeRange', e.target.value)}
-            aria-label="Time range for top wallpapers"
-            disabled={filters.sort !== 'toplist'}
-          >
-            {TIME_RANGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            timeRange={filters.timeRange}
+            onChange={(nextSort) => onFilterChange('sort', nextSort)}
+            onTimeRangeChange={(nextRange) =>
+              onMultipleFilterChanges?.({ sort: 'toplist', timeRange: nextRange })
+            }
+          />
         </div>
 
         {/* Color */}
@@ -487,18 +316,7 @@ export function ControlsPanel({
             Color
             {isColorActive && <span className="filter-active-indicator">*</span>}
           </label>
-          <select
-            id="color"
-            value={filters.color}
-            onChange={(e) => onFilterChange('color', e.target.value)}
-            aria-label="Color filter"
-          >
-            {COLOR_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <ColorMenu value={filters.color} onChange={(nextColor) => onFilterChange('color', nextColor)} />
         </div>
 
         {/* File Type */}
@@ -507,35 +325,16 @@ export function ControlsPanel({
             File type
             {isFileTypeActive && <span className="filter-active-indicator">*</span>}
           </label>
-          <select
-            id="fileType"
+          <FileTypeMenu
             value={filters.fileType}
-            onChange={(e) => onFilterChange('fileType', e.target.value)}
-            aria-label="File type filter"
-          >
-            {FILE_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            onChange={(nextType) => onFilterChange('fileType', nextType)}
+          />
         </div>
 
         {/* View Mode (layout preference, not part of filter asterisk logic) */}
         <div className="control-item control-item-view">
           <label htmlFor="viewMode">View</label>
-          <select
-            id="viewMode"
-            value={viewMode}
-            onChange={(e) => onViewModeChange(e.target.value)}
-            aria-label="Grid view mode"
-          >
-            <option value={VIEW_MODES.CRAMPED}>Cramped</option>
-            <option value={VIEW_MODES.COMPACT}>Compact</option>
-            <option value={VIEW_MODES.COMFORTABLE}>Comfortable</option>
-            <option value={VIEW_MODES.COZY}>Cozy</option>
-            <option value={VIEW_MODES.CINEMATIC}>Cinematic</option>
-          </select>
+          <ViewMenu value={viewMode} onChange={onViewModeChange} />
         </div>
 
         <div className="control-item control-item-clear">
@@ -549,7 +348,9 @@ export function ControlsPanel({
             Clear
           </button>
         </div>
+
       </div>
+      </FilterMenuProvider>
 
       {/* Content filters row */}
       <div className="controls-content-row">

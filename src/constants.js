@@ -106,8 +106,7 @@ export function getColorName(hexColor) {
 }
 
 export const SORT_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: 'date_added', label: 'Date added' },
+  { value: '', label: 'Latest' },
   { value: 'relevance', label: 'Relevance' },
   { value: 'random', label: 'Random' },
   { value: 'views', label: 'Views' },
@@ -181,6 +180,7 @@ export const STORAGE_KEYS = {
   FILTERS: 'wallhaven-filters',
   FAVORITES: 'wallhaven-favorites',
   VIEW_MODE: 'wallhaven-view-mode',
+  VIEW_MODE_MOBILE: 'wallhaven-view-mode-mobile',
   DOWNLOADED: 'wallhaven-downloaded',
   DOWNLOADED_DATA: 'wallhaven-downloaded-data',
 };

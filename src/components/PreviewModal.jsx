@@ -5,6 +5,84 @@ import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
 import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl, downloadWallpaperBlob } from '../utils/imageUtils';
 
+function useNarrowPreview() {
+  const query = '(max-width: 768px)';
+  const [matches, setMatches] = React.useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(query).matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  return matches;
+}
+
+const NAMED_ASPECTS = [
+  [48, 9], [32, 9], [21, 9], [16, 9], [16, 10], [3, 2], [4, 3], [5, 4],
+  [1, 1], [4, 5], [3, 4], [2, 3], [10, 16], [9, 16], [9, 18], [9, 21],
+];
+
+function greatestCommonDivisor(a, b) {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x || 1;
+}
+
+function describeAspect(width, height, ratioValue) {
+  const numericWidth = Number(width);
+  const numericHeight = Number(height);
+  const value = numericWidth > 0 && numericHeight > 0
+    ? numericWidth / numericHeight
+    : Number(ratioValue);
+  if (!Number.isFinite(value) || value <= 0) return null;
+
+  const exact = Number.isFinite(Number(ratioValue))
+    ? String(ratioValue)
+    : value.toFixed(2);
+
+  let match = null;
+  for (const [ratioWidth, ratioHeight] of NAMED_ASPECTS) {
+    const target = ratioWidth / ratioHeight;
+    const diff = Math.abs(value - target) / target;
+    if (diff <= 0.025 && (!match || diff < match.diff)) {
+      match = { label: `${ratioWidth}:${ratioHeight}`, diff };
+    }
+  }
+  if (match) return { label: match.label, exact };
+
+  const roundedWidth = Math.round(numericWidth);
+  const roundedHeight = Math.round(numericHeight);
+  if (roundedWidth > 0 && roundedHeight > 0) {
+    const divisor = greatestCommonDivisor(roundedWidth, roundedHeight);
+    const ratioWidth = roundedWidth / divisor;
+    const ratioHeight = roundedHeight / divisor;
+    if (ratioWidth <= 48 && ratioHeight <= 48) {
+      return { label: `${ratioWidth}:${ratioHeight}`, exact };
+    }
+  }
+
+  let closest = NAMED_ASPECTS[0];
+  let closestDiff = Infinity;
+  for (const [ratioWidth, ratioHeight] of NAMED_ASPECTS) {
+    const diff = Math.abs(value - (ratioWidth / ratioHeight));
+    if (diff < closestDiff) {
+      closest = [ratioWidth, ratioHeight];
+      closestDiff = diff;
+    }
+  }
+  return { label: `${closest[0]}:${closest[1]}`, exact };
+}
+
 function PreviewTags({ tags, onTagClick }) {
   const [expanded, setExpanded] = React.useState(false);
   const containerRef = React.useRef(null);
@@ -127,8 +205,12 @@ export function PreviewModal({
   const [useProxy, setUseProxy] = React.useState(true);
   const [uploaderName, setUploaderName] = React.useState(null);
   const [uploaderAvatar, setUploaderAvatar] = React.useState(null);
+  const [detailSource, setDetailSource] = React.useState('');
+  const [detailSourceId, setDetailSourceId] = React.useState(wallpaper?.id ?? null);
+  const narrowPreview = useNarrowPreview();
   const [downloadStatus, setDownloadStatus] = React.useState('idle'); // 'idle', 'downloading', 'error'
   const [positionFaded, setPositionFaded] = React.useState(false);
+  const [fullscreenChromeFaded, setFullscreenChromeFaded] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
@@ -136,6 +218,9 @@ export function PreviewModal({
   const imageContainerRef = React.useRef(null);
   const hoveringContentRef = React.useRef(false);
   const dragRef = React.useRef(null);
+  const chromeTimerRef = React.useRef(null);
+  const chromeHoverRef = React.useRef(false);
+  const revealFullscreenChromeRef = React.useRef(() => {});
   
   const fullImageUrl = React.useMemo(() => toProxiedFullUrl(wallpaper.url), [wallpaper.url]);
 
@@ -164,8 +249,9 @@ export function PreviewModal({
     setUseProxy(true);
   }, [wallpaper.id, wallpaper.url]);
   
-  // Fetch full wallpaper details to get tags
+  // Fetch full wallpaper details to get tags and the source URL search rows often omit.
   React.useEffect(() => {
+    let cancelled = false;
     const loadTags = async () => {
       setLoadingTags(true);
       setTags([]);
@@ -173,9 +259,12 @@ export function PreviewModal({
       setUploaderAvatar(null);
 
       const details = await fetchWallpaperDetails(wallpaper.id);
+      if (cancelled) return;
       if (details && details.tags) {
         setTags(details.tags);
       }
+      const nextSource = typeof details?.source === 'string' ? details.source.trim() : '';
+      setDetailSource(nextSource);
 
       // If detailed uploader info is available (with API key), use it in the modal
       if (details && details.uploader) {
@@ -194,6 +283,9 @@ export function PreviewModal({
     };
 
     loadTags();
+    return () => {
+      cancelled = true;
+    };
   }, [wallpaper.id, fetchWallpaperDetails]);
 
   useEffect(() => {
@@ -210,6 +302,37 @@ export function PreviewModal({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, [wallpaper.id]);
+
+  revealFullscreenChromeRef.current = () => {
+    setFullscreenChromeFaded(false);
+    window.clearTimeout(chromeTimerRef.current);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    chromeTimerRef.current = window.setTimeout(() => {
+      if (!chromeHoverRef.current) setFullscreenChromeFaded(true);
+    }, 1150);
+  };
+
+  const holdFullscreenChrome = () => {
+    chromeHoverRef.current = true;
+    window.clearTimeout(chromeTimerRef.current);
+    setFullscreenChromeFaded(false);
+  };
+
+  const releaseFullscreenChrome = () => {
+    chromeHoverRef.current = false;
+    revealFullscreenChromeRef.current();
+  };
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setFullscreenChromeFaded(false);
+      chromeHoverRef.current = false;
+      window.clearTimeout(chromeTimerRef.current);
+      return undefined;
+    }
+    revealFullscreenChromeRef.current();
+    return () => window.clearTimeout(chromeTimerRef.current);
+  }, [isFullscreen, wallpaper.id]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -363,6 +486,19 @@ export function PreviewModal({
     }
   };
 
+  const changeZoom = (factor) => {
+    setZoom((current) => {
+      const next = Math.min(8, Math.max(1, Math.round(current * factor * 100) / 100));
+      if (next <= 1) setPan({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const resetZoom = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
   const handleCopyId = async () => {
     const value = wallpaper.id;
     let copied = false;
@@ -391,9 +527,25 @@ export function PreviewModal({
     addToast(message, type, 2000);
   };
 
+  // Drop the previous wallpaper's source before paint so the button never
+  // flashes lit for a wallpaper that has no source.
+  if (wallpaper?.id && detailSourceId !== wallpaper.id) {
+    setDetailSourceId(wallpaper.id);
+    setDetailSource('');
+  }
+
   if (!wallpaper) return null;
 
   const uploaderLabel = uploaderName || wallpaper.author;
+  const listingSource = typeof wallpaper.source === 'string' ? wallpaper.source.trim() : '';
+  const sourceUrl = (detailSourceId === wallpaper.id ? detailSource : '') || listingSource;
+  const sourceIcon = (
+    <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+    </svg>
+  );
+  const aspect = describeAspect(wallpaper.width, wallpaper.height, wallpaper.ratio);
   const canSearchUploader = Boolean(uploaderLabel && uploaderLabel !== 'Anonymous');
   const uploaderContent = (
     <>
@@ -449,9 +601,14 @@ export function PreviewModal({
           )}
 
           <div 
-            className="preview-image-container"
+            className={`preview-image-container${isFullscreen && fullscreenChromeFaded ? ' is-chrome-faded' : ''}`}
             ref={imageContainerRef}
             style={wallpaper.width && wallpaper.height ? { aspectRatio: `${wallpaper.width} / ${wallpaper.height}` } : undefined}
+            onMouseMove={() => {
+              if (document.fullscreenElement === imageContainerRef.current) {
+                revealFullscreenChromeRef.current();
+              }
+            }}
           >
             {!imageLoaded && !imageError && (
               <div className="preview-skeleton" aria-label="Loading image..." />
@@ -500,22 +657,68 @@ export function PreviewModal({
             />
             {previewPosition && (
               <p
-                className={`preview-position${positionFaded ? ' is-faded' : ''}`}
+                className={`preview-position${!isFullscreen && positionFaded ? ' is-faded' : ''}`}
                 aria-live="polite"
               >
                 {previewPosition.current.toLocaleString()} of {previewPosition.total.toLocaleString()}
               </p>
             )}
             {isFullscreen && (
-              <button
-                type="button"
-                className="preview-fullscreen-exit"
-                onClick={() => {
-                  document.exitFullscreen().catch(() => {});
-                }}
-              >
-                Exit fullscreen
-              </button>
+              <>
+                <div
+                  className="preview-zoom-controls"
+                  role="group"
+                  aria-label="Zoom"
+                  onMouseEnter={holdFullscreenChrome}
+                  onMouseLeave={releaseFullscreenChrome}
+                  onFocus={holdFullscreenChrome}
+                  onBlur={releaseFullscreenChrome}
+                >
+                  <button
+                    type="button"
+                    className="preview-zoom-button"
+                    onClick={() => changeZoom(1 / 1.25)}
+                    disabled={zoom <= 1}
+                    aria-label="Zoom out"
+                    title="Zoom out"
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    className="preview-zoom-button preview-zoom-reset"
+                    onClick={resetZoom}
+                    disabled={zoom <= 1}
+                    aria-label="Reset zoom"
+                    title="Reset zoom"
+                  >
+                    {Math.round(zoom * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    className="preview-zoom-button"
+                    onClick={() => changeZoom(1.25)}
+                    disabled={zoom >= 8}
+                    aria-label="Zoom in"
+                    title="Zoom in"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="preview-fullscreen-exit"
+                  onClick={() => {
+                    document.exitFullscreen().catch(() => {});
+                  }}
+                  onMouseEnter={holdFullscreenChrome}
+                  onMouseLeave={releaseFullscreenChrome}
+                  onFocus={holdFullscreenChrome}
+                  onBlur={releaseFullscreenChrome}
+                >
+                  Exit fullscreen
+                </button>
+              </>
             )}
           </div>
 
@@ -675,20 +878,27 @@ export function PreviewModal({
                   <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </a>
-              {wallpaper.source && (
+              {sourceUrl ? (
                 <a
-                  href={wallpaper.source}
+                  href={sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="preview-action-button preview-action-source"
                   aria-label="View original source"
-                  title={`View source: ${wallpaper.source}`}
+                  title={`View source: ${sourceUrl}`}
                 >
-                  <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                  </svg>
+                  {sourceIcon}
                 </a>
+              ) : (
+                <button
+                  type="button"
+                  className="preview-action-button preview-action-source is-unavailable"
+                  disabled
+                  aria-label="No original source"
+                  title="No original source"
+                >
+                  {sourceIcon}
+                </button>
               )}
             </div>
           </div>
@@ -706,8 +916,10 @@ export function PreviewModal({
               >
                 {wallpaper.width} × {wallpaper.height}
               </button>
-              {wallpaper.ratio && (
-                <span className="preview-meta-secondary">({wallpaper.ratio}:1)</span>
+              {aspect && (
+                <span className="preview-meta-secondary" title={`${aspect.exact}:1`}>
+                  ({aspect.label})
+                </span>
               )}
             </div>
             
@@ -770,11 +982,15 @@ export function PreviewModal({
               <span className="preview-meta-value">{(wallpaper.ups || 0).toLocaleString()}</span>
             </div>
             
+            <div className="preview-meta-trailing">
             {wallpaper.createdAt && (
               <div className="preview-meta-item">
                 <span className="preview-meta-label">Uploaded</span>
-                <span className="preview-meta-value">
-                  {formatRelativeDate(wallpaper.createdAt)}
+                <span
+                  className="preview-meta-value"
+                  title={narrowPreview ? formatRelativeDate(wallpaper.createdAt) : undefined}
+                >
+                  {formatRelativeDate(wallpaper.createdAt, { compact: narrowPreview })}
                 </span>
               </div>
             )}
@@ -797,6 +1013,7 @@ export function PreviewModal({
                 </div>
               </div>
             )}
+            </div>
             </div>
           </div>
         </div>
