@@ -207,6 +207,26 @@ function App() {
     return JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS);
   }, [filters]);
   
+  // Filters last sent to Wallhaven. Clear uses this so the Fetch button
+  // only lights up when the grid would actually change.
+  const appliedFiltersRef = useRef(filters);
+  // Options for a search that still has to wait for the page to reset.
+  const pendingFetchOptionsRef = useRef(null);
+  const fetchApplied = useCallback((nextFilters, nextPage, options) => {
+    appliedFiltersRef.current = nextFilters;
+    return fetchWallpapers(nextFilters, nextPage, options);
+  }, [fetchWallpapers]);
+  const startSearch = useCallback((nextFilters) => {
+    appliedFiltersRef.current = nextFilters;
+    const fetchOptions = { renewSeed: true };
+    if (page === 1) {
+      return fetchWallpapers(nextFilters, 1, fetchOptions);
+    }
+    pendingFetchOptionsRef.current = fetchOptions;
+    resetPage();
+    return Promise.resolve();
+  }, [page, resetPage, fetchWallpapers]);
+
   // Handle filter changes (no auto-fetch, just update state)
   const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({
@@ -214,11 +234,7 @@ function App() {
       [key]: typeof value === 'function' ? value(prev[key]) : value
     }));
     setHasPendingFilterChanges(true);
-    // Reset to page 1, but don't fetch (user must click Fetch button)
-    if (page !== 1) {
-      resetPage();
-    }
-  }, [page, resetPage]);
+  }, []);
 
   // Handle multiple filter changes at once (no auto-fetch)
   const handleMultipleFilterChanges = useCallback((updates) => {
@@ -227,32 +243,26 @@ function App() {
       ...updates
     }));
     setHasPendingFilterChanges(true);
-    // Reset to page 1, but don't fetch (user must click Fetch button)
-    if (page !== 1) {
-      resetPage();
-    }
-  }, [page, resetPage]);
+  }, []);
 
-  // Clear all filters back to defaults (no auto-fetch)
+  // Clear the form back to defaults without searching. The current page
+  // stays put until the user presses Fetch.
   const handleClearFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
-    setHasPendingFilterChanges(false);
-    if (page !== 1) {
-      resetPage();
-    }
-  }, [page, resetPage]);
+    const showingDefaults = JSON.stringify(appliedFiltersRef.current) === JSON.stringify(DEFAULT_FILTERS);
+    setHasPendingFilterChanges(!showingDefaults);
+  }, []);
 
   // Handle search for similar wallpapers
   const handleSearchSimilar = useCallback(async (wallpaperId) => {
     const newFilters = buildSimilarFilters(filters, wallpaperId);
     setFilters(newFilters);
-    resetPage();
     // Clear selections when starting a new search
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await fetchWallpapers(newFilters, 1);
+    await startSearch(newFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+  }, [filters, setFilters, startSearch]);
   
   // Fetch wallpapers (manual fetch via button)
   const handleFetch = useCallback(async () => {
@@ -263,48 +273,36 @@ function App() {
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
     
-    // Add to search history
     addToHistory(filters);
-    
-    // If already on page 1, just fetch. If not, reset to page 1 (which triggers auto-fetch via useEffect)
-    if (page === 1) {
-      await fetchWallpapers(filters, 1);
-    } else {
-      resetPage(); // This will trigger the page change useEffect which handles the fetch
-    }
+    await startSearch(filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page, resetPage, addToHistory]);
+  }, [filters, addToHistory, startSearch]);
   
   // Handle selecting a search from history
   const handleSelectHistory = useCallback((historyFilters) => {
-    // Apply the filters from history
-    setFilters(historyFilters);
+    const { seed, ...formFilters } = historyFilters;
+    setFilters(formFilters);
     // Clear selections
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
     // Reset to page 1 and fetch
     clearCache();
-    resetPage();
-    fetchWallpapers(historyFilters, 1);
-  }, [resetPage, fetchWallpapers]);
-  
-  // Keep latest filters in a ref so page navigation always uses current filters
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+    startSearch(formFilters);
+  }, [startSearch]);
   
   // Initial load - fetch with default filters
   const hasInitialFetchRef = useRef(false);
   useEffect(() => {
     if (!hasInitialFetchRef.current) {
       hasInitialFetchRef.current = true;
-      fetchWallpapers(filters, 1);
+      fetchApplied(filters, 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Auto-fetch ONLY on page changes (not filter changes)
   // Note: Only 'page' in dependency array - filters handled via ref
-  // fetchWallpapers is NOT in deps to prevent loops when seed changes
+  // fetchApplied is NOT in deps to prevent a page-change loop
   const prevPageRef = useRef(page);
   useEffect(() => {
     // Skip if this is just the initial page value
@@ -313,8 +311,10 @@ function App() {
     }
     prevPageRef.current = page;
     
-    // Page changed - fetch with current filters
-    if (!filtersRef.current || !filtersRef.current.categories) {
+    // Page changed. Keep the search that produced this grid. Unsent form
+    // edits stay pending until the user presses Fetch.
+    const appliedFilters = appliedFiltersRef.current;
+    if (!appliedFilters || !appliedFilters.categories) {
       return;
     }
 
@@ -338,7 +338,9 @@ function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    fetchWallpapers(filtersRef.current, page);
+    const pendingOptions = pendingFetchOptionsRef.current;
+    pendingFetchOptionsRef.current = null;
+    fetchApplied(appliedFilters, page, pendingOptions || { renewSeed: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
   
@@ -346,12 +348,12 @@ function App() {
   useEffect(() => {
     if (wallpapers.length > 0 && totalPages && !isLoading) {
       const timer = setTimeout(() => {
-        prefetchPages(filters, page, totalPages);
+        prefetchPages(appliedFiltersRef.current, page, totalPages);
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [wallpapers, page, totalPages, filters, isLoading, prefetchPages]);
+  }, [wallpapers, page, totalPages, isLoading, prefetchPages]);
   
   // Filter wallpapers based on showOnlySelected, favorites, or downloaded (needed for range selection)
   const displayedWallpapers = showOnlySelected 
@@ -679,16 +681,12 @@ function App() {
     // Close preview modal
     setPreviewWallpaper(null);
     
-    // Reset to page 1
-    resetPage();
-    
     // Clear selections when starting a new search
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
     
-    // Fetch with the new color filter
-    await fetchWallpapers(updatedFilters, 1);
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+    await startSearch(updatedFilters);
+  }, [filters, setFilters, startSearch]);
 
   // Handle resolution click from thumbnails
   const handleResolutionClick = useCallback(async (width, height) => {
@@ -706,12 +704,11 @@ function App() {
     setFilters(updatedFilters);
 
     setPreviewWallpaper(null);
-    resetPage();
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
 
-    await fetchWallpapers(updatedFilters, 1);
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+    await startSearch(updatedFilters);
+  }, [filters, setFilters, startSearch]);
 
   // Handle uploader click in preview modal
   const handleUploaderClick = useCallback(async (username) => {
@@ -724,11 +721,10 @@ function App() {
     };
     setFilters(updatedFilters);
     setPreviewWallpaper(null);
-    resetPage();
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await fetchWallpapers(updatedFilters, 1);
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+    await startSearch(updatedFilters);
+  }, [filters, setFilters, startSearch]);
 
   // Handle category click in preview modal
   const handleCategoryClick = useCallback(async (category) => {
@@ -745,11 +741,10 @@ function App() {
     };
     setFilters(updatedFilters);
     setPreviewWallpaper(null);
-    resetPage();
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await fetchWallpapers(updatedFilters, 1);
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+    await startSearch(updatedFilters);
+  }, [filters, setFilters, startSearch]);
 
   // Handle tag click in preview modal
   const handleTagClick = useCallback(async (tagName) => {
@@ -763,16 +758,12 @@ function App() {
     // Close preview modal
     setPreviewWallpaper(null);
     
-    // Reset to page 1
-    resetPage();
-    
     // Clear selections when starting a new search
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
     
-    // Fetch with the new tag search
-    await fetchWallpapers(updatedFilters, 1);
-  }, [filters, setFilters, resetPage, fetchWallpapers]);
+    await startSearch(updatedFilters);
+  }, [filters, setFilters, startSearch]);
   
   // Ref to track if we need to reopen preview after page change
   const shouldReopenPreviewRef = useRef(null); // 'next' or 'prev' or null

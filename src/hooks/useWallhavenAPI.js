@@ -1,10 +1,17 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { API_CONFIG } from '../constants';
 import { getCachedData, setCachedData, generateCacheKey, parseWallhavenResponse, retryWithBackoff } from '../utils';
 import { prefetchImage } from '../utils/imageUtils';
 import { getStoredApiKey } from '../utils/apiKeyStorage';
 
 const detailsCache = new Map();
+
+function searchCacheKey(filters, page, seedValue) {
+  if (filters.sort === 'random' && seedValue) {
+    return generateCacheKey({ ...filters, page, seed: seedValue });
+  }
+  return generateCacheKey({ ...filters, page });
+}
 
 /**
  * Custom hook for Wallhaven API calls
@@ -15,7 +22,10 @@ export function useWallhavenAPI() {
   const [wallpapers, setWallpapers] = useState([]);
   const [totalPages, setTotalPages] = useState(null);
   const [totalResults, setTotalResults] = useState(null);
-  const [seed, setSeed] = useState(null); // For random pagination
+  // Wallhaven returns a seed with random results. Later pages must send it
+  // or each page is a new shuffle. A ref keeps the latest seed available
+  // to pagination and prefetch without waiting on another render.
+  const seedRef = useRef(null);
   const abortControllerRef = useState(() => ({ current: null }))[0]; // Persists across renders
 
   // Shared function to build search URL consistently
@@ -67,8 +77,9 @@ export function useWallhavenAPI() {
     if (filters.color) url.searchParams.set('colors', filters.color);
     if (filters.sort === 'toplist') url.searchParams.set('topRange', filters.timeRange);
 
-    // Seed for random pagination
-    if (filters.sort === 'random' && seedValue && page > 1) {
+    // Keep one shuffle for every page of this search, including a return to page 1.
+    // A new Fetch clears the seed before calling this.
+    if (filters.sort === 'random' && seedValue) {
       url.searchParams.set('seed', seedValue);
     }
 
@@ -79,7 +90,7 @@ export function useWallhavenAPI() {
     return { url, apiKey };
   }, []);
 
-  const fetchWallpapers = useCallback(async (filters, page = 1, useCurrentSeed = false) => {
+  const fetchWallpapers = useCallback(async (filters, page = 1, options = {}) => {
     // Cancel any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -103,12 +114,16 @@ export function useWallhavenAPI() {
       return { success: false, error: errorMessage };
     }
 
-    const cacheKey = generateCacheKey({ ...filters, page });
+    // Fetch asks for a new shuffle. Paging, including back to page 1, keeps
+    // the seed from the last shuffle. Other sorts drop it.
+    if (options.renewSeed || filters.sort !== 'random') {
+      seedRef.current = null;
+    }
+    const seedToUse = filters.sort === 'random' ? seedRef.current : null;
+    const cacheKey = searchCacheKey(filters, page, seedToUse);
+    const skipCache = filters.sort === 'random' && !seedToUse;
     
-    // Skip cache for random searches to get new results every time
-    const skipCache = filters.sort === 'random';
-    
-    // Check cache first (unless random)
+    // Check cache first (unless this is a new random shuffle)
     if (!skipCache) {
       try {
         const cached = getCachedData(cacheKey, API_CONFIG.CACHE_DURATION);
@@ -123,9 +138,6 @@ export function useWallhavenAPI() {
         // Continue with fetch if cache fails - no logging needed
       }
     }
-
-    // For random searches: only use seed if explicitly requested (pagination within same random search)
-    const seedToUse = (filters.sort === 'random' && useCurrentSeed) ? seed : null;
 
     try {
       const result = await retryWithBackoff(async () => {
@@ -172,31 +184,31 @@ export function useWallhavenAPI() {
 
       const { wallpapers: parsedWallpapers, lastPage, total, seed: newSeed } = parseWallhavenResponse(result);
 
-      // Cache the result (skip for random to get fresh results each time)
-      if (!skipCache) {
-        setCachedData(cacheKey, {
-          wallpapers: parsedWallpapers,
-          lastPage,
-          total,
-          seed: newSeed,
-        });
-      }
-
       setWallpapers(parsedWallpapers);
       setTotalPages(lastPage && lastPage > 0 ? lastPage : null);
       setTotalResults(total);
-      
-      // Save seed only for random searches (page 1 gets a new seed, subsequent pages use it)
-      if (filters.sort === 'random' && newSeed) {
-        setSeed(newSeed);
+
+      // Keep the first seed for this shuffle. Later pages also return a seed,
+      // and replacing ours would make the next page a different random set.
+      if (filters.sort === 'random' && newSeed && !seedRef.current) {
+        seedRef.current = newSeed;
       } else if (filters.sort !== 'random') {
-        // Clear seed when not doing random search
-        setSeed(null);
+        seedRef.current = null;
+      }
+
+      const storedSeed = filters.sort === 'random' ? seedRef.current : null;
+      if (filters.sort !== 'random' || storedSeed) {
+        setCachedData(searchCacheKey(filters, page, storedSeed), {
+          wallpapers: parsedWallpapers,
+          lastPage,
+          total,
+          seed: storedSeed,
+        });
       }
 
       return {
         success: true,
-        data: { wallpapers: parsedWallpapers, lastPage, total, seed: newSeed },
+        data: { wallpapers: parsedWallpapers, lastPage, total, seed: seedRef.current },
       };
     } catch (err) {
       // Ignore abort errors (request was cancelled by user action)
@@ -213,7 +225,7 @@ export function useWallhavenAPI() {
     } finally {
       setIsLoading(false);
     }
-  }, [seed, buildSearchUrl, abortControllerRef]);
+  }, [buildSearchUrl, abortControllerRef]);
 
   const clearError = useCallback(() => {
     setError('');
@@ -234,7 +246,8 @@ export function useWallhavenAPI() {
     
     // Prefetch in parallel without blocking
     pagesToPrefetch.forEach(async (page) => {
-      const cacheKey = generateCacheKey({ ...filters, page });
+      const seedToUse = filters.sort === 'random' ? seedRef.current : null;
+      const cacheKey = searchCacheKey(filters, page, seedToUse);
       
       // Skip if already cached
       const cached = getCachedData(cacheKey, API_CONFIG.CACHE_DURATION);
@@ -244,8 +257,6 @@ export function useWallhavenAPI() {
       
       // Fetch and cache silently (don't update state)
       try {
-        // Only use seed for random searches during prefetch
-        const seedToUse = filters.sort === 'random' ? seed : null;
         const { url, apiKey } = buildSearchUrl(filters, page, seedToUse);
         
         const res = await fetch(url.toString(), {
@@ -272,7 +283,7 @@ export function useWallhavenAPI() {
         // Silently fail prefetch - don't show errors to avoid console spam
       }
     });
-  }, [seed, buildSearchUrl]);
+  }, [buildSearchUrl]);
 
   // Fetch individual wallpaper details (includes tags)
   const fetchWallpaperDetails = useCallback(async (wallpaperId) => {

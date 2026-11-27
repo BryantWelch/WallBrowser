@@ -395,27 +395,18 @@ export function PreviewModal({
     return () => window.removeEventListener('keydown', handleEscape, true);
   }, [onClose]);
 
-  // Focus trap and keyboard navigation
+  // Focus the modal and lock background scroll. Arrow keys are handled by App
+  // so a press at the edge of a page turns exactly one page.
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'ArrowLeft' && hasPrevious) onPrevious();
-      if (e.key === 'ArrowRight' && hasNext) onNext();
-    };
-
-    // Focus the modal on mount for keyboard accessibility
     if (modalRef.current) {
       modalRef.current.focus();
     }
-    
-    // Prevent body scroll when modal is open
-    document.body.style.overflow = 'hidden';
 
-    window.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [onClose, onNext, onPrevious, hasNext, hasPrevious]);
+  }, []);
 
   // Handle download
   const handleDownload = async () => {

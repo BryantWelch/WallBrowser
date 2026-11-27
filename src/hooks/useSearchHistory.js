@@ -14,7 +14,12 @@ export function useSearchHistory() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setHistory(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        const cleaned = Array.isArray(parsed) ? parsed.map(stripStoredSeed) : [];
+        setHistory(cleaned);
+        if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+        }
       }
     } catch (error) {
       console.error('Failed to load search history:', error);
@@ -37,14 +42,15 @@ export function useSearchHistory() {
    */
   const addToHistory = useCallback((filters) => {
     // Create a summary of the search for display
-    const summary = createSearchSummary(filters);
+    const { seed, ...filtersWithoutSeed } = filters || {};
+    const summary = createSearchSummary(filtersWithoutSeed);
     
     // Don't add empty searches
     if (!summary) return;
 
     const entry = {
       id: Date.now(),
-      filters: { ...filters },
+      filters: { ...filtersWithoutSeed },
       summary,
       timestamp: new Date().toISOString(),
     };
@@ -105,6 +111,16 @@ export function useSearchHistory() {
 /**
  * Create a human-readable summary of the search filters
  */
+function stripStoredSeed(entry) {
+  if (!entry?.filters) return entry;
+  const { seed, ...filters } = entry.filters;
+  return {
+    ...entry,
+    filters,
+    summary: createSearchSummary(filters) || entry.summary,
+  };
+}
+
 function createSearchSummary(filters) {
   const parts = [];
 
