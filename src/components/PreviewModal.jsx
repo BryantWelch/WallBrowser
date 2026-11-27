@@ -307,18 +307,32 @@ export function PreviewModal({
     setFullscreenChromeFaded(false);
     window.clearTimeout(chromeTimerRef.current);
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     chromeTimerRef.current = window.setTimeout(() => {
       if (!chromeHoverRef.current) setFullscreenChromeFaded(true);
-    }, 1150);
+    }, coarsePointer ? 3500 : 1150);
   };
 
+  const isCoarsePointer = () =>
+    window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
   const holdFullscreenChrome = () => {
+    // A tap on a phone fires mouseenter and focus, then never mouseleave,
+    // which would leave the controls stuck on screen.
+    if (isCoarsePointer()) return;
     chromeHoverRef.current = true;
     window.clearTimeout(chromeTimerRef.current);
     setFullscreenChromeFaded(false);
   };
 
   const releaseFullscreenChrome = () => {
+    if (isCoarsePointer()) return;
+    chromeHoverRef.current = false;
+    revealFullscreenChromeRef.current();
+  };
+
+  const releaseFullscreenChromeAfterTouch = () => {
+    if (!isCoarsePointer()) return;
     chromeHoverRef.current = false;
     revealFullscreenChromeRef.current();
   };
@@ -457,8 +471,14 @@ export function PreviewModal({
     }
   };
 
+  const handleFullscreenSurfacePointerDown = (event) => {
+    if (document.fullscreenElement !== imageContainerRef.current) return;
+    if (event.target.closest('button')) return;
+    revealFullscreenChromeRef.current();
+  };
+
   const handleImagePointerDown = (event) => {
-    if (!isFullscreen || zoom <= 1) return;
+    if (!isFullscreen || zoom <= 1 || fullscreenChromeFaded) return;
     dragRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -609,6 +629,7 @@ export function PreviewModal({
                 revealFullscreenChromeRef.current();
               }
             }}
+            onPointerDown={handleFullscreenSurfacePointerDown}
           >
             {!imageLoaded && !imageError && (
               <div className="preview-skeleton" aria-label="Loading image..." />
@@ -666,13 +687,46 @@ export function PreviewModal({
             {isFullscreen && (
               <>
                 <div
-                  className="preview-zoom-controls"
-                  role="group"
-                  aria-label="Zoom"
+                  className="preview-fullscreen-toolbar"
                   onMouseEnter={holdFullscreenChrome}
                   onMouseLeave={releaseFullscreenChrome}
                   onFocus={holdFullscreenChrome}
                   onBlur={releaseFullscreenChrome}
+                  onPointerUp={releaseFullscreenChromeAfterTouch}
+                  onPointerCancel={releaseFullscreenChromeAfterTouch}
+                >
+                {hasPrevious && (
+                  <button
+                    type="button"
+                    className="preview-fullscreen-nav preview-fullscreen-nav-prev"
+                    onClick={onPrevious}
+                    disabled={isLoadingPage}
+                    aria-label="Previous wallpaper"
+                    title="Previous wallpaper"
+                  >
+                    <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                )}
+                {hasNext && (
+                  <button
+                    type="button"
+                    className="preview-fullscreen-nav preview-fullscreen-nav-next"
+                    onClick={onNext}
+                    disabled={isLoadingPage}
+                    aria-label="Next wallpaper"
+                    title="Next wallpaper"
+                  >
+                    <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                )}
+                <div
+                  className="preview-zoom-controls"
+                  role="group"
+                  aria-label="Zoom"
                 >
                   <button
                     type="button"
@@ -705,6 +759,7 @@ export function PreviewModal({
                     +
                   </button>
                 </div>
+                </div>
                 <button
                   type="button"
                   className="preview-fullscreen-exit"
@@ -715,6 +770,8 @@ export function PreviewModal({
                   onMouseLeave={releaseFullscreenChrome}
                   onFocus={holdFullscreenChrome}
                   onBlur={releaseFullscreenChrome}
+                  onPointerUp={releaseFullscreenChromeAfterTouch}
+                  onPointerCancel={releaseFullscreenChromeAfterTouch}
                 >
                   Exit fullscreen
                 </button>
