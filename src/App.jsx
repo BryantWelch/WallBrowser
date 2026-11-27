@@ -16,7 +16,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
 import { clearCache, buildSimilarFilters } from './utils';
-import { prefetchImage, toProxiedFullUrl, downloadWallpaperBlob, createWallpapersZip } from './utils/imageUtils';
+import { prefetchImage, toProxiedFullUrl, toWorkerFullUrl, downloadWallpaperBlob, createWallpapersZip } from './utils/imageUtils';
 import { ToastContainer } from './components/Toast';
 import { useToast } from './context/ToastContext';
 
@@ -363,7 +363,7 @@ function App() {
     : showOnlyDownloaded
     ? downloadedViewWallpapers
     : wallpapers;
-  
+
   // Toggle selection (with shift-click range selection support)
   const toggleSelect = useCallback((id, index, shiftKey = false) => {
     // Handle shift-click range selection
@@ -780,33 +780,44 @@ function App() {
     }
   }, [wallpapers, isLoading]);
 
+  // Favorites, Selected, and Downloads are one list. Preview next and
+  // previous stay inside that list. A normal search still walks the page
+  // and turns to the next page at the end.
+  const libraryPreview = showOnlySelected || showOnlyFavorites || showOnlyDownloaded;
+  const previewList = libraryPreview ? displayedWallpapers : wallpapers;
+  const previewIndex = previewList.findIndex(w => w.id === previewWallpaper?.id);
+  const hasNextPreview = previewIndex >= 0 && (
+    previewIndex < previewList.length - 1 || (!libraryPreview && canGoNext)
+  );
+  const hasPreviousPreview = previewIndex > 0 || (
+    !libraryPreview && previewIndex === 0 && canGoPrevious
+  );
+
   const handlePreviewNext = useCallback(() => {
-    const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
-    if (currentIndex < wallpapers.length - 1) {
-      setPreviewWallpaper(wallpapers[currentIndex + 1]);
-    } else if (canGoNext && !showOnlySelected && !showOnlyFavorites) {
-      // Go to next page
+    const list = libraryPreview ? displayedWallpapers : wallpapers;
+    const currentIndex = list.findIndex(w => w.id === previewWallpaper?.id);
+    if (currentIndex >= 0 && currentIndex < list.length - 1) {
+      setPreviewWallpaper(list[currentIndex + 1]);
+      return;
+    }
+    if (!libraryPreview && currentIndex === list.length - 1 && canGoNext) {
       shouldReopenPreviewRef.current = 'next';
-      // Keep preview open with loading state
       goToNextPage();
     }
-  }, [wallpapers, previewWallpaper, canGoNext, showOnlySelected, showOnlyFavorites, goToNextPage]);
+  }, [libraryPreview, displayedWallpapers, wallpapers, previewWallpaper, canGoNext, goToNextPage]);
   
   const handlePreviewPrevious = useCallback(() => {
-    const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
+    const list = libraryPreview ? displayedWallpapers : wallpapers;
+    const currentIndex = list.findIndex(w => w.id === previewWallpaper?.id);
     if (currentIndex > 0) {
-      setPreviewWallpaper(wallpapers[currentIndex - 1]);
-    } else if (canGoPrevious && !showOnlySelected && !showOnlyFavorites) {
-      // Go to previous page
+      setPreviewWallpaper(list[currentIndex - 1]);
+      return;
+    }
+    if (!libraryPreview && currentIndex === 0 && canGoPrevious) {
       shouldReopenPreviewRef.current = 'prev';
-      // Keep preview open with loading state
       goToPreviousPage();
     }
-  }, [wallpapers, previewWallpaper, canGoPrevious, showOnlySelected, showOnlyFavorites, goToPreviousPage]);
-  
-  const previewIndex = wallpapers.findIndex(w => w.id === previewWallpaper?.id);
-  const hasNextPreview = previewIndex < wallpapers.length - 1 || (canGoNext && !showOnlySelected && !showOnlyFavorites);
-  const hasPreviousPreview = previewIndex > 0 || (canGoPrevious && !showOnlySelected && !showOnlyFavorites);
+  }, [libraryPreview, displayedWallpapers, wallpapers, previewWallpaper, canGoPrevious, goToPreviousPage]);
 
   // Wallhaven returns 24 per page. Keep the counter on the page that actually
   // owns the list currently on screen while the next page is still loading.
@@ -846,22 +857,23 @@ function App() {
   useEffect(() => {
     if (!previewWallpaper) return;
 
-    const currentIndex = wallpapers.findIndex(w => w.id === previewWallpaper.id);
+    const list = libraryPreview ? displayedWallpapers : wallpapers;
+    const currentIndex = list.findIndex(w => w.id === previewWallpaper.id);
     if (currentIndex === -1) return;
 
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < wallpapers.length) {
-      const nextWallpaper = wallpapers[nextIndex];
-      if (nextWallpaper && nextWallpaper.url) {
-        const url = toProxiedFullUrl(nextWallpaper.url);
-        prefetchImage(url);
-      }
+    const nextWallpaper = list[currentIndex + 1];
+    if (!nextWallpaper) return;
+
+    if (nextWallpaper.url) {
+      prefetchImage(toProxiedFullUrl(nextWallpaper.url), toWorkerFullUrl(nextWallpaper.url));
     }
-  }, [previewWallpaper, wallpapers]);
+    // Search rows omit the uploader, tags, and source. Warm the next
+    // wallpaper's details the same way as its image.
+    fetchWallpaperDetails(nextWallpaper.id, { silent: true });
+  }, [previewWallpaper, wallpapers, displayedWallpapers, libraryPreview, fetchWallpaperDetails]);
   
   // Keyboard shortcuts
   useKeyboardShortcuts({
-    onEnter: handleFetch,
     onEscape: () => {
       if (document.fullscreenElement) return;
       if (previewWallpaper) {
@@ -870,6 +882,12 @@ function App() {
       // Don't clear selections on Escape - let users keep their multi-page selections
     },
     onArrowLeft: () => {
+      // With the preview closed, these modes have no pages to turn.
+      // With it open, the arrow stays inside that list.
+      if (showOnlySelected || showOnlyFavorites || showOnlyDownloaded) {
+        if (previewWallpaper && hasPreviousPreview) handlePreviewPrevious();
+        return;
+      }
       if (previewWallpaper && hasPreviousPreview) {
         handlePreviewPrevious();
       } else {
@@ -877,6 +895,10 @@ function App() {
       }
     },
     onArrowRight: () => {
+      if (showOnlySelected || showOnlyFavorites || showOnlyDownloaded) {
+        if (previewWallpaper && hasNextPreview) handlePreviewNext();
+        return;
+      }
       if (previewWallpaper && hasNextPreview) {
         handlePreviewNext();
       } else {

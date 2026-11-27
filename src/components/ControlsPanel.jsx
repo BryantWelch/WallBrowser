@@ -92,8 +92,9 @@ export function ControlsPanel({
     setShowHistory(false);
   };
 
-  const handleSearchKeyPress = (e) => {
+  const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       onFetch();
     }
   };
@@ -129,7 +130,7 @@ export function ControlsPanel({
               placeholder="e.g. cyberpunk city, @username, +tag -tag"
               value={filters.query}
               onChange={(e) => onFilterChange('query', e.target.value)}
-              onKeyPress={handleSearchKeyPress}
+              onKeyDown={handleSearchKeyDown}
               aria-label="Search wallpapers"
             />
             <div className="search-input-suffix">

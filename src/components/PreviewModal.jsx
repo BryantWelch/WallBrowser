@@ -1,9 +1,18 @@
 import React, { useEffect, useLayoutEffect } from 'react';
-import { formatFileSize, formatRelativeDate, getFavoriteToast } from '../utils';
+import { formatFileSize, formatRelativeDate, getFavoriteToast, avatarUrls } from '../utils';
 import { getColorName } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { useImageWithRetry } from '../hooks/useImageWithRetry';
-import { IMAGE_RETRY_CONFIG, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl, downloadWallpaperBlob } from '../utils/imageUtils';
+import { getCachedWallpaperDetails } from '../hooks/useWallhavenAPI';
+import { IMAGE_RETRY_CONFIG, rememberRefusedImage, toProxiedFullUrl, toProxiedDownloadUrl, toWorkerFullUrl, downloadWallpaperBlob, wasImageRefused } from '../utils/imageUtils';
+
+const AVATAR_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+function avatarStartIndex(urls) {
+  const index = urls.findIndex((url) => url && !wasImageRefused(url));
+  if (index >= 0) return index;
+  return Math.max(urls.length - 1, 0);
+}
 
 function useNarrowPreview() {
   const query = '(max-width: 768px)';
@@ -204,7 +213,9 @@ export function PreviewModal({
   const [loadingTags, setLoadingTags] = React.useState(false);
   const [useProxy, setUseProxy] = React.useState(true);
   const [uploaderName, setUploaderName] = React.useState(null);
-  const [uploaderAvatar, setUploaderAvatar] = React.useState(null);
+  const [uploaderForId, setUploaderForId] = React.useState(null);
+  const [detailAvatars, setDetailAvatars] = React.useState([]);
+  const [avatarIndex, setAvatarIndex] = React.useState(0);
   const [detailSource, setDetailSource] = React.useState('');
   const [detailSourceId, setDetailSourceId] = React.useState(wallpaper?.id ?? null);
   const narrowPreview = useNarrowPreview();
@@ -228,12 +239,16 @@ export function PreviewModal({
     imageUrl,
     imageLoaded,
     imageError,
+    attempt,
     handleLoad,
     handleError,
     reset,
   } = useImageWithRetry(fullImageUrl, {
     ...IMAGE_RETRY_CONFIG,
     maxRetries: 3,
+    // One wait long enough for a large file to finish, then a single replacement.
+    watchdogTimeout: 8000,
+    stallRetries: 1,
     // On hard failure, fall back once to the Cloudflare Worker URL for this full image.
     onHardFailure: ({ lastUrl }) => {
       // If we're already using the worker URL, don't loop.
@@ -250,14 +265,11 @@ export function PreviewModal({
   }, [wallpaper.id, wallpaper.url]);
   
   // Fetch full wallpaper details to get tags and the source URL search rows often omit.
+  // A prefetched next wallpaper already applied its details before paint, so
+  // this must not clear them and flash the loading placeholders.
   React.useEffect(() => {
     let cancelled = false;
     const loadTags = async () => {
-      setLoadingTags(true);
-      setTags([]);
-      setUploaderName(null);
-      setUploaderAvatar(null);
-
       const details = await fetchWallpaperDetails(wallpaper.id);
       if (cancelled) return;
       if (details && details.tags) {
@@ -269,13 +281,14 @@ export function PreviewModal({
       // If detailed uploader info is available (with API key), use it in the modal
       if (details && details.uploader) {
         const name = details.uploader.username || null;
-        const avatar = details.uploader.avatar?.['128px'] || null;
+        const avatars = avatarUrls(details.uploader.avatar);
 
         if (name) {
           setUploaderName(name);
         }
-        if (avatar) {
-          setUploaderAvatar(avatar);
+        if (avatars.length) {
+          setDetailAvatars(avatars);
+          setAvatarIndex(avatarStartIndex(avatars));
         }
       }
 
@@ -538,16 +551,42 @@ export function PreviewModal({
     addToast(message, type, 2000);
   };
 
-  // Drop the previous wallpaper's source before paint so the button never
-  // flashes lit for a wallpaper that has no source.
-  if (wallpaper?.id && detailSourceId !== wallpaper.id) {
+  // Apply a prefetched next wallpaper before paint. Search rows omit the
+  // uploader, tags, and source, and the previous wallpaper's values must not
+  // linger or flash through a loading state.
+  if (wallpaper?.id && uploaderForId !== wallpaper.id) {
+    const cached = getCachedWallpaperDetails(wallpaper.id);
+    const cachedName = cached?.uploader?.username || null;
+    const cachedAvatars = avatarUrls(cached?.uploader?.avatar);
+    const listedName = wallpaper.author && wallpaper.author !== 'Anonymous' ? wallpaper.author : null;
+    const listedAvatars = wallpaper.authorAvatarOptions?.length
+      ? wallpaper.authorAvatarOptions
+      : (wallpaper.authorAvatar ? [wallpaper.authorAvatar] : []);
+    const nextSource = typeof cached?.source === 'string' ? cached.source.trim() : '';
+    setUploaderForId(wallpaper.id);
+    setUploaderName(cachedName || listedName);
+    const nextAvatars = cachedAvatars.length ? cachedAvatars : listedAvatars;
+    setDetailAvatars(nextAvatars);
+    setAvatarIndex(avatarStartIndex(nextAvatars));
+    setTags(Array.isArray(cached?.tags) ? cached.tags : []);
+    setLoadingTags(!cached);
     setDetailSourceId(wallpaper.id);
-    setDetailSource('');
+    setDetailSource(nextSource);
   }
 
   if (!wallpaper) return null;
 
-  const uploaderLabel = uploaderName || wallpaper.author;
+  const uploaderLabel = uploaderName || (
+    wallpaper.author && wallpaper.author !== 'Anonymous' ? wallpaper.author : ''
+  );
+  const avatarChoices = detailAvatars.length
+    ? detailAvatars
+    : (wallpaper.authorAvatarOptions?.length
+      ? wallpaper.authorAvatarOptions
+      : (wallpaper.authorAvatar ? [wallpaper.authorAvatar] : []));
+  const avatarChoice = avatarChoices[avatarIndex] || '';
+  const avatarBlocked = Boolean(avatarChoice && wasImageRefused(avatarChoice));
+  const avatarSrc = avatarBlocked ? AVATAR_PLACEHOLDER : avatarChoice;
   const listingSource = typeof wallpaper.source === 'string' ? wallpaper.source.trim() : '';
   const sourceUrl = (detailSourceId === wallpaper.id ? detailSource : '') || listingSource;
   const sourceIcon = (
@@ -560,11 +599,18 @@ export function PreviewModal({
   const canSearchUploader = Boolean(uploaderLabel && uploaderLabel !== 'Anonymous');
   const uploaderContent = (
     <>
-      {(uploaderAvatar || wallpaper.authorAvatar) && (
+      {avatarSrc && (
         <img
-          src={uploaderAvatar || wallpaper.authorAvatar}
+          src={avatarSrc}
           alt=""
           className="preview-author-avatar"
+          onError={() => {
+            if (!avatarChoice || avatarBlocked) return;
+            rememberRefusedImage(avatarChoice);
+            setAvatarIndex((current) => (
+              current < avatarChoices.length - 1 ? current + 1 : current
+            ));
+          }}
         />
       )}
       {uploaderLabel}
@@ -652,6 +698,7 @@ export function PreviewModal({
             )}
             <img
               key={imageUrl} // Force re-render when URL changes
+              data-attempt={attempt}
               src={imageUrl}
               alt={wallpaper.title}
               className={`preview-image${isFullscreen && zoom > 1 ? ' preview-image-pannable' : ''}`}

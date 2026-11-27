@@ -1,8 +1,111 @@
 import JSZip from 'jszip';
 
-export function prefetchImage(url) {
-  if (!url) return;
+// A refusal or a missing file will not succeed on the next try.
+const PERMANENT_FAILURE = new Set([403, 404]);
+// Proxy addresses that already came back 403 or 404. The look-ahead and the
+// preview share this so a refused file is not requested a second time.
+const refusedImageUrls = new Set();
+// Keep prefetch elements alive until they settle, or the error handler can be
+// collected before the response arrives.
+const pendingPrefetches = new Set();
+
+function imageCacheKey(url) {
+  if (!url) return '';
+  try {
+    const resolved = new URL(url, window.location.href);
+    resolved.searchParams.delete('retry');
+    resolved.hash = '';
+    return resolved.href;
+  } catch {
+    return String(url).replace(/[?&]retry=\d+/, '').split('#')[0];
+  }
+}
+
+export function rememberRefusedImage(url) {
+  const key = imageCacheKey(url);
+  if (key) refusedImageUrls.add(key);
+}
+
+export function wasImageRefused(url) {
+  return refusedImageUrls.has(imageCacheKey(url));
+}
+
+export function imageResponseStatus(url) {
+  if (!url || typeof performance === 'undefined' || !performance.getEntriesByName) return 0;
+  const names = [url];
+  try {
+    names.push(new URL(url, window.location.href).href);
+  } catch {
+    // The image address could not be resolved.
+  }
+  for (const name of names) {
+    const entries = performance.getEntriesByName(name);
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const status = entries[index].responseStatus;
+      if (typeof status === 'number' && status > 0) return status;
+    }
+  }
+  return 0;
+}
+
+function prefetchUrl(url) {
   const img = new Image();
+  const release = () => pendingPrefetches.delete(img);
+  img.onload = release;
+  img.onerror = release;
+  pendingPrefetches.add(img);
+  img.src = url;
+  return img;
+}
+
+// Avatar files are cross-origin, so a failed load has no readable status.
+// Any error is final for that address. The preview then tries the next size
+// without requesting this one again.
+export function prefetchAvatar(url) {
+  if (!url || wasImageRefused(url)) return;
+
+  const img = new Image();
+  const release = () => pendingPrefetches.delete(img);
+  img.onload = release;
+  img.onerror = () => {
+    rememberRefusedImage(url);
+    release();
+  };
+  pendingPrefetches.add(img);
+  img.src = url;
+}
+
+export function prefetchImage(url, fallbackUrl) {
+  if (!url) return;
+
+  // Already refused: warm the backup only. Another proxy request cannot succeed.
+  if (wasImageRefused(url)) {
+    if (fallbackUrl) prefetchUrl(fallbackUrl);
+    return;
+  }
+
+  const img = new Image();
+  const release = () => pendingPrefetches.delete(img);
+  img.onload = release;
+  img.onerror = () => {
+    const readStatus = (attempt) => {
+      const status = imageResponseStatus(img.src) || imageResponseStatus(url);
+      if (PERMANENT_FAILURE.has(status)) {
+        rememberRefusedImage(url);
+        if (fallbackUrl) prefetchUrl(fallbackUrl);
+        release();
+        return;
+      }
+      // The status entry can land just after the error event.
+      if (!status && attempt < 4) {
+        setTimeout(() => readStatus(attempt + 1), 40);
+        return;
+      }
+      release();
+    };
+    readStatus(0);
+  };
+  pendingPrefetches.add(img);
   img.src = url;
 }
 

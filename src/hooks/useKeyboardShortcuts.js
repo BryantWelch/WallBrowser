@@ -6,16 +6,12 @@ import { useEffect } from 'react';
 export function useKeyboardShortcuts(shortcuts) {
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Don't trigger if user is typing in an input
+      // Typing in a field stays in that field. The search box handles its own Enter.
       if (
         event.target.tagName === 'INPUT' ||
         event.target.tagName === 'TEXTAREA' ||
         event.target.tagName === 'SELECT'
       ) {
-        // But allow Enter in search inputs
-        if (event.key === 'Enter' && shortcuts.onEnter) {
-          shortcuts.onEnter();
-        }
         return;
       }
 

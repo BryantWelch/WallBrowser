@@ -36,7 +36,7 @@ export function PrivacyModal({ isOpen, onClose }) {
         <div className="settings-content">
           <div className="settings-section">
             <p style={{ fontSize: '0.95rem', lineHeight: '1.7', marginBottom: '1.5rem' }}>
-              <strong>Last updated:</strong> November 18, 2025
+              <strong>Last updated:</strong> November 27, 2026
             </p>
             
             <h3>Data Storage</h3>
@@ -44,11 +44,16 @@ export function PrivacyModal({ isOpen, onClose }) {
               WallBrowser stores the following data <strong>locally in your browser</strong> using localStorage:
             </p>
             <ul style={{ paddingLeft: '1.5rem', lineHeight: '1.8' }}>
-              <li><strong>Wallhaven API Key:</strong> If you provide one, it's stored encrypted in your browser</li>
+              <li><strong>Wallhaven API Key:</strong> If you provide one, it is stored in your browser</li>
               <li><strong>Favorites:</strong> Wallpapers you mark as favorites</li>
-              <li><strong>View Preferences:</strong> Your selected view mode (compact/comfortable/cozy)</li>
-              <li><strong>Cache Data:</strong> Temporary wallpaper metadata for faster browsing</li>
+              <li><strong>Downloads:</strong> Wallpapers you have downloaded on this device</li>
+              <li><strong>Search History:</strong> Recent searches, so you can run them again</li>
+              <li><strong>View Preferences:</strong> Your selected view mode</li>
+              <li><strong>Catalog Totals:</strong> The header counts, kept so they can show again after a reload</li>
             </ul>
+            <p>
+              Wallpaper search results are kept in memory for the current visit and cleared when you reload the page. They are not written to localStorage.
+            </p>
           </div>
 
           <div className="settings-section">
@@ -97,6 +102,8 @@ export function PrivacyModal({ isOpen, onClose }) {
             <ul style={{ paddingLeft: '1.5rem', lineHeight: '1.8' }}>
               <li>Clear your API key anytime in Settings</li>
               <li>Remove favorites individually or clear all</li>
+              <li>Remove downloads from download history</li>
+              <li>Clear search history from the search box</li>
               <li>Clear all stored data by clearing your browser's localStorage for this site</li>
             </ul>
           </div>

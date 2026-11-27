@@ -120,6 +120,8 @@ export async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
       return await fn();
     } catch (error) {
       lastError = error;
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('429') || message.toLowerCase().includes('rate')) throw error;
       if (i < maxRetries - 1) {
         const delay = baseDelay * Math.pow(2, i);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -197,6 +199,21 @@ export function getFavoriteToast(isFavorite) {
   return { message: 'Removed from favorites', type: 'info' };
 }
 
+const AVATAR_SIZES = ['200px', '32px'];
+
+// Sizes Wallhaven actually serves. 128px and 20px are refused even when the file exists.
+export function avatarUrls(avatar) {
+  if (!avatar || typeof avatar !== 'object') return [];
+  const urls = AVATAR_SIZES
+    .map((size) => avatar[size])
+    .filter((url) => typeof url === 'string' && url);
+  return [...new Set(urls)];
+}
+
+export function pickAvatarUrl(avatar) {
+  return avatarUrls(avatar)[0] || null;
+}
+
 /**
  * Parse Wallhaven API response
  */
@@ -227,7 +244,8 @@ export function parseWallhavenResponse(json) {
         title: item?.tags?.map((t) => t.name).join(', ') || item.id,
         author: item?.uploader?.username ?? 'Anonymous',
         authorGroup: item?.uploader?.group,
-        authorAvatar: item?.uploader?.avatar?.['128px'],
+        authorAvatar: pickAvatarUrl(item?.uploader?.avatar),
+        authorAvatarOptions: avatarUrls(item?.uploader?.avatar),
         ups: item?.favorites ?? 0,
         permalink: item?.url,
         shortUrl: item?.short_url,

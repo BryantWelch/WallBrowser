@@ -1,10 +1,15 @@
 import { useState, useCallback, useRef } from 'react';
 import { API_CONFIG } from '../constants';
-import { getCachedData, setCachedData, generateCacheKey, parseWallhavenResponse, retryWithBackoff } from '../utils';
-import { prefetchImage } from '../utils/imageUtils';
+import { getCachedData, setCachedData, generateCacheKey, parseWallhavenResponse, retryWithBackoff, pickAvatarUrl } from '../utils';
+import { prefetchAvatar, prefetchImage } from '../utils/imageUtils';
 import { getStoredApiKey } from '../utils/apiKeyStorage';
 
 const detailsCache = new Map();
+const detailsInflight = new Map();
+
+export function getCachedWallpaperDetails(wallpaperId) {
+  return detailsCache.get(wallpaperId) || null;
+}
 
 function searchCacheKey(filters, page, seedValue) {
   if (filters.sort === 'random' && seedValue) {
@@ -286,11 +291,15 @@ export function useWallhavenAPI() {
   }, [buildSearchUrl]);
 
   // Fetch individual wallpaper details (includes tags)
-  const fetchWallpaperDetails = useCallback(async (wallpaperId) => {
+  const fetchWallpaperDetails = useCallback(async (wallpaperId, { silent = false } = {}) => {
     if (detailsCache.has(wallpaperId)) {
       return detailsCache.get(wallpaperId);
     }
+    if (detailsInflight.has(wallpaperId)) {
+      return detailsInflight.get(wallpaperId);
+    }
 
+    const request = (async () => {
     try {
       const apiKey = getStoredApiKey();
       const url = `${API_CONFIG.BASE_URL}/w/${wallpaperId}${apiKey ? `?apikey=${apiKey}` : ''}`;
@@ -313,10 +322,20 @@ export function useWallhavenAPI() {
       const json = await response.json();
       const details = json.data; // Returns full wallpaper object with tags
       detailsCache.set(wallpaperId, details);
+      const avatar = pickAvatarUrl(details?.uploader?.avatar);
+      if (avatar) prefetchAvatar(avatar);
       return details;
     } catch (err) {
-      console.error('Failed to fetch wallpaper details:', err);
+      if (!silent) console.error('Failed to fetch wallpaper details:', err);
       return null;
+    }
+    })();
+
+    detailsInflight.set(wallpaperId, request);
+    try {
+      return await request;
+    } finally {
+      detailsInflight.delete(wallpaperId);
     }
   }, []);
 

@@ -1,4 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import {
+  DEFAULT_FILTERS,
+  FILE_TYPE_OPTIONS,
+  TIME_RANGE_OPTIONS,
+  getColorName,
+} from '../constants';
 
 const STORAGE_KEY = 'wallbrowser_search_history';
 const MAX_HISTORY_ITEMS = 20;
@@ -7,24 +13,9 @@ const MAX_HISTORY_ITEMS = 20;
  * Hook to manage search history with localStorage persistence
  */
 export function useSearchHistory() {
-  const [history, setHistory] = useState([]);
-
-  // Load history from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const cleaned = Array.isArray(parsed) ? parsed.map(stripStoredSeed) : [];
-        setHistory(cleaned);
-        if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load search history:', error);
-    }
-  }, []);
+  // Read before the first paint so a fetch in that first moment is added
+  // onto the saved list instead of being replaced by it.
+  const [history, setHistory] = useState(readHistory);
 
   // Save history to localStorage whenever it changes
   const saveHistory = useCallback((newHistory) => {
@@ -111,70 +102,101 @@ export function useSearchHistory() {
 /**
  * Create a human-readable summary of the search filters
  */
-function stripStoredSeed(entry) {
-  if (!entry?.filters) return entry;
+function readHistory() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+
+    const seen = new Set();
+    const cleaned = [];
+    parsed.forEach((entry) => {
+      const normalized = normalizeEntry(entry);
+      if (!normalized || seen.has(normalized.summary)) return;
+      seen.add(normalized.summary);
+      cleaned.push(normalized);
+    });
+
+    if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+    }
+    return cleaned;
+  } catch (error) {
+    console.error('Failed to load search history:', error);
+    return [];
+  }
+}
+
+function normalizeEntry(entry) {
+  if (!entry?.filters) return null;
   const { seed, ...filters } = entry.filters;
-  return {
-    ...entry,
-    filters,
-    summary: createSearchSummary(filters) || entry.summary,
-  };
+  const summary = createSearchSummary(filters);
+  if (!summary) return null;
+  return { ...entry, filters, summary };
 }
 
 function createSearchSummary(filters) {
   const parts = [];
 
-  // Query
   if (filters.query?.trim()) {
     parts.push(`"${filters.query.trim()}"`);
   }
 
-  // Categories
-  const categories = [];
-  if (filters.general) categories.push('General');
-  if (filters.anime) categories.push('Anime');
-  if (filters.people) categories.push('People');
-  if (categories.length > 0 && categories.length < 3) {
-    parts.push(categories.join(', '));
-  }
+  const categoryLabel = categorySummary(filters.categories);
+  if (categoryLabel) parts.push(categoryLabel);
 
-  // Resolution
   if (filters.resolution) {
-    parts.push(filters.resolution);
-  } else if (filters.ratio) {
-    parts.push(filters.ratio.replace('x', ':'));
+    const size = filters.resolution.replace(/x/gi, '×');
+    parts.push(filters.exactResolution ? `= ${size}` : `≥ ${size}`);
+  }
+  if (filters.ratio) {
+    parts.push(filters.ratio.replace(/x/gi, ':'));
   }
 
-  // Sort
-  if (filters.sort && filters.sort !== 'date_added') {
+  if (filters.fileType) {
+    const fileLabel = FILE_TYPE_OPTIONS.find((option) => option.value === filters.fileType)?.label;
+    if (fileLabel && fileLabel !== 'Any') parts.push(fileLabel);
+  }
+
+  if (filters.sort === 'toplist') {
+    const range = TIME_RANGE_OPTIONS.find((option) => option.value === filters.timeRange)?.label || 'Month';
+    parts.push(`Top · ${range}`);
+  } else if (filters.sort && filters.sort !== 'date_added') {
     const sortLabels = {
       relevance: 'Relevance',
       random: 'Random',
       views: 'Views',
       favorites: 'Favorites',
-      toplist: 'Toplist',
       hot: 'Hot',
     };
-    if (sortLabels[filters.sort]) {
-      parts.push(sortLabels[filters.sort]);
-    }
+    if (sortLabels[filters.sort]) parts.push(sortLabels[filters.sort]);
   }
 
-  // Color
   if (filters.color) {
-    parts.push(`Color: ${filters.color}`);
+    parts.push(`Color: ${getColorName(filters.color)}`);
   }
 
-  // If no meaningful filters, return null
-  if (parts.length === 0) {
-    // Check if it's just default "all" search
-    if (filters.general && filters.anime && filters.people) {
-      return 'All wallpapers';
-    }
-    return null;
+  if (filters.includeNsfw) {
+    parts.push('NSFW');
   }
 
-  return parts.join(' · ');
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function categorySummary(categories) {
+  const selected = categories || DEFAULT_FILTERS.categories;
+  const defaults = DEFAULT_FILTERS.categories;
+  const isDefault = selected.general === defaults.general
+    && selected.anime === defaults.anime
+    && selected.people === defaults.people;
+  if (isDefault) return null;
+
+  const names = [];
+  if (selected.general) names.push('General');
+  if (selected.anime) names.push('Anime');
+  if (selected.people) names.push('People');
+  return names.length > 0 ? names.join(', ') : 'No categories';
 }
 
 /**
