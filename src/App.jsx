@@ -926,9 +926,7 @@ function App() {
         setShowOnlyFavorites(false);
         setShowOnlyDownloaded(false);
       } else {
-        // Exiting show-selected mode: clear selections and return to saved page
-        setSelectedIds(new Set());
-        setSelectedWallpapers(new Map());
+        // Leave the list. The checks stay so the same wallpapers are still selected.
         goToPage(pageBeforeShowingSelected);
       }
       return !prev;
