@@ -1332,6 +1332,33 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+}
+
+.error-banner > span {
+  min-width: 0;
+}
+
+.error-banner-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.15rem;
+}
+
+.error-retry {
+  background: none;
+  border: 1px solid rgba(254, 226, 226, 0.45);
+  color: #fee2e2;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.error-retry:hover {
+  background: rgba(254, 226, 226, 0.12);
 }
 
 .error-dismiss {
@@ -2530,6 +2557,33 @@ svg.action-icon {
   align-items: center;
   min-width: 0;
   width: 100%;
+}
+
+.preview-details-missing {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.preview-details-retry {
+  flex-shrink: 0;
+  border: 1px solid rgba(226, 232, 240, 0.4);
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text-primary);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.preview-details-retry:hover {
+  background: rgba(226, 232, 240, 0.12);
 }
 
 .preview-properties {

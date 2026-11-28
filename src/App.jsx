@@ -160,7 +160,7 @@ function App() {
   }, []);
   
   // API and data management
-  const { isLoading, error, wallpapers, totalPages: apiTotalPages, totalResults, fetchWallpapers, fetchWallpaperDetails, prefetchPages, clearError } = useWallhavenAPI();
+  const { isLoading, error, searchFailed, searchFailure, wallpapers, totalPages: apiTotalPages, totalResults, fetchWallpapers, fetchWallpaperDetails, prefetchPages, clearError, retrySearch } = useWallhavenAPI();
   
   // Pagination
   const { page, totalPages, setTotalPages, goToPage, goToNextPage, goToPreviousPage, resetPage, canGoNext, canGoPrevious } = usePagination();
@@ -1061,6 +1061,7 @@ function App() {
           isLoading={isLoading}
           error={error}
           onClearError={clearError}
+          onRetry={retrySearch}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -1227,6 +1228,8 @@ function App() {
             onMarkDownloaded={markDownloaded}
             viewMode={viewMode}
             isLoading={isLoading}
+            loadFailed={searchFailed && !showOnlyFavorites && !showOnlySelected && !showOnlyDownloaded}
+            loadFailedMessage={searchFailure}
           />
 
           {wallpapers.length > 0 && (

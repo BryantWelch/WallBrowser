@@ -7,6 +7,26 @@ import { getStoredApiKey } from '../utils/apiKeyStorage';
 const detailsCache = new Map();
 const detailsInflight = new Map();
 
+function searchFailureMessage(status, hadResults) {
+  if (status === 429) return 'Rate limited (429). Please wait a moment and try again.';
+  if (status === 401) return 'Invalid API key or unauthorized access (401). Check your API key in Settings';
+  if (status === 500) return "Couldn't load this page (500). Try Prev or Next.";
+  const code = status ? ` (${status})` : '';
+  return hadResults ? `Couldn't load new results${code}.` : `Couldn't load wallpapers${code}.`;
+}
+
+function searchHttpError(status) {
+  const error = new Error(searchFailureMessage(status, false));
+  error.status = status;
+  return error;
+}
+
+function isOfflineError(error) {
+  if (error?.status) return false;
+  const message = error instanceof Error ? error.message : '';
+  return error?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(message);
+}
+
 export function getCachedWallpaperDetails(wallpaperId) {
   return detailsCache.get(wallpaperId) || null;
 }
@@ -24,6 +44,8 @@ function searchCacheKey(filters, page, seedValue) {
 export function useWallhavenAPI() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [searchFailure, setSearchFailure] = useState('');
   const [wallpapers, setWallpapers] = useState([]);
   const [totalPages, setTotalPages] = useState(null);
   const [totalResults, setTotalResults] = useState(null);
@@ -31,6 +53,8 @@ export function useWallhavenAPI() {
   // or each page is a new shuffle. A ref keeps the latest seed available
   // to pagination and prefetch without waiting on another render.
   const seedRef = useRef(null);
+  const hasResultsRef = useRef(false);
+  const lastRequestRef = useRef(null);
   const abortControllerRef = useState(() => ({ current: null }))[0]; // Persists across renders
 
   // Shared function to build search URL consistently
@@ -107,6 +131,8 @@ export function useWallhavenAPI() {
     
     setIsLoading(true);
     setError('');
+    const hadResults = hasResultsRef.current;
+    lastRequestRef.current = { filters, page, options };
 
     // Validate filters object
     if (!filters || typeof filters !== 'object') {
@@ -136,6 +162,9 @@ export function useWallhavenAPI() {
           setWallpapers(cached.wallpapers);
           setTotalPages(cached.lastPage);
           setTotalResults(cached.total);
+          hasResultsRef.current = Array.isArray(cached.wallpapers) && cached.wallpapers.length > 0;
+          setSearchFailed(false);
+          setSearchFailure('');
           setIsLoading(false);
           return { success: true, data: cached };
         }
@@ -163,25 +192,12 @@ export function useWallhavenAPI() {
         });
 
         if (!response.ok) {
-          if (response.status === 429) {
-            throw new Error('Rate limited. Please wait a moment and try again.');
-          }
-          if (response.status === 401) {
-            throw new Error('Invalid API key or unauthorized access. Check your API key in Settings');
-          }
-          if (response.status === 500) {
-            throw new Error(`Wallhaven's servers cannot load page ${page}. Try navigating sequentially with Prev/Next, or use filters to narrow your search.`);
-          }
-          // Try to get error details
-          const text = await response.text();
-          throw new Error(`API error ${response.status}: ${text.substring(0, 100)}`);
+          throw searchHttpError(response.status);
         }
 
-        // Check if response is JSON
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-          const text = await response.text();
-          throw new Error(`Expected JSON but got: ${text.substring(0, 200)}`);
+          throw searchHttpError(response.status);
         }
 
         return response.json();
@@ -192,6 +208,9 @@ export function useWallhavenAPI() {
       setWallpapers(parsedWallpapers);
       setTotalPages(lastPage && lastPage > 0 ? lastPage : null);
       setTotalResults(total);
+      hasResultsRef.current = parsedWallpapers.length > 0;
+      setSearchFailed(false);
+      setSearchFailure('');
 
       // Keep the first seed for this shuffle. Later pages also return a seed,
       // and replacing ours would make the next page a different random set.
@@ -221,11 +240,20 @@ export function useWallhavenAPI() {
         return { success: false, error: 'Request cancelled' };
       }
       
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      const offline = isOfflineError(err);
+      const errorMessage = offline
+        ? "Couldn't reach Wallhaven (offline)."
+        : (err?.status
+          ? searchFailureMessage(err.status, hadResults)
+          : (hadResults ? "Couldn't load new results." : "Couldn't load wallpapers."));
       setError(errorMessage);
-      setWallpapers([]);
-      setTotalPages(null);
-      setTotalResults(null);
+      if (!hadResults) {
+        setSearchFailed(true);
+        setSearchFailure(errorMessage);
+        setWallpapers([]);
+        setTotalPages(null);
+        setTotalResults(null);
+      }
       return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
@@ -235,6 +263,12 @@ export function useWallhavenAPI() {
   const clearError = useCallback(() => {
     setError('');
   }, []);
+
+  const retrySearch = useCallback(() => {
+    const last = lastRequestRef.current;
+    if (!last) return Promise.resolve({ success: false });
+    return fetchWallpapers(last.filters, last.page, last.options);
+  }, [fetchWallpapers]);
 
   // Prefetch adjacent pages in the background (doesn't update UI)
   const prefetchPages = useCallback(async (filters, currentPage, totalPages) => {
@@ -313,7 +347,9 @@ export function useWallhavenAPI() {
         });
 
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          const error = new Error(`HTTP ${res.status}`);
+          error.status = res.status;
+          throw error;
         }
 
         return res;
@@ -327,7 +363,9 @@ export function useWallhavenAPI() {
       return details;
     } catch (err) {
       if (!silent) console.error('Failed to fetch wallpaper details:', err);
-      return null;
+      const message = err instanceof Error ? err.message : '';
+      const offline = err?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(message);
+      return { errorStatus: err?.status || (offline ? 'offline' : null) };
     }
     })();
 
@@ -342,6 +380,8 @@ export function useWallhavenAPI() {
   return {
     isLoading,
     error,
+    searchFailed,
+    searchFailure,
     wallpapers,
     totalPages,
     totalResults,
@@ -349,5 +389,6 @@ export function useWallhavenAPI() {
     fetchWallpaperDetails,
     prefetchPages,
     clearError,
+    retrySearch,
   };
 }

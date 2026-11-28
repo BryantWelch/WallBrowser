@@ -211,6 +211,8 @@ export function PreviewModal({
   const { addToast } = useToast();
   const [tags, setTags] = React.useState([]);
   const [loadingTags, setLoadingTags] = React.useState(false);
+  const [detailsFailed, setDetailsFailed] = React.useState(false);
+  const [detailsStatus, setDetailsStatus] = React.useState(null);
   const [useProxy, setUseProxy] = React.useState(true);
   const [uploaderName, setUploaderName] = React.useState(null);
   const [uploaderForId, setUploaderForId] = React.useState(null);
@@ -264,6 +266,47 @@ export function PreviewModal({
     setUseProxy(true);
   }, [wallpaper.id, wallpaper.url]);
   
+  const previewIdRef = React.useRef(wallpaper?.id);
+  previewIdRef.current = wallpaper?.id;
+
+  const applyLoadedDetails = (details) => {
+    if (details.tags) setTags(details.tags);
+    const nextSource = typeof details.source === 'string' ? details.source.trim() : '';
+    setDetailSource(nextSource);
+    if (details.uploader) {
+      const name = details.uploader.username || null;
+      const avatars = avatarUrls(details.uploader.avatar);
+      if (name) setUploaderName(name);
+      if (avatars.length) {
+        setDetailAvatars(avatars);
+        setAvatarIndex(avatarStartIndex(avatars));
+      }
+    }
+    setDetailsFailed(false);
+    setDetailsStatus(null);
+    setLoadingTags(false);
+  };
+
+  const noteDetailsFailure = (details) => {
+    setDetailsStatus(details && 'errorStatus' in details ? details.errorStatus : null);
+    setDetailsFailed(true);
+    setLoadingTags(false);
+  };
+
+  const retryDetails = () => {
+    const id = wallpaper.id;
+    setDetailsFailed(false);
+    setLoadingTags(true);
+    fetchWallpaperDetails(id).then((details) => {
+      if (previewIdRef.current !== id) return;
+      if (!details || 'errorStatus' in details) {
+        noteDetailsFailure(details);
+        return;
+      }
+      applyLoadedDetails(details);
+    });
+  };
+
   // Fetch full wallpaper details to get tags and the source URL search rows often omit.
   // A prefetched next wallpaper already applied its details before paint, so
   // this must not clear them and flash the loading placeholders.
@@ -272,27 +315,11 @@ export function PreviewModal({
     const loadTags = async () => {
       const details = await fetchWallpaperDetails(wallpaper.id);
       if (cancelled) return;
-      if (details && details.tags) {
-        setTags(details.tags);
+      if (!details || 'errorStatus' in details) {
+        noteDetailsFailure(details);
+        return;
       }
-      const nextSource = typeof details?.source === 'string' ? details.source.trim() : '';
-      setDetailSource(nextSource);
-
-      // If detailed uploader info is available (with API key), use it in the modal
-      if (details && details.uploader) {
-        const name = details.uploader.username || null;
-        const avatars = avatarUrls(details.uploader.avatar);
-
-        if (name) {
-          setUploaderName(name);
-        }
-        if (avatars.length) {
-          setDetailAvatars(avatars);
-          setAvatarIndex(avatarStartIndex(avatars));
-        }
-      }
-
-      setLoadingTags(false);
+      applyLoadedDetails(details);
     };
 
     loadTags();
@@ -569,6 +596,8 @@ export function PreviewModal({
     setDetailAvatars(nextAvatars);
     setAvatarIndex(avatarStartIndex(nextAvatars));
     setTags(Array.isArray(cached?.tags) ? cached.tags : []);
+    setDetailsFailed(false);
+    setDetailsStatus(null);
     setLoadingTags(!cached);
     setDetailSourceId(wallpaper.id);
     setDetailSource(nextSource);
@@ -867,8 +896,27 @@ export function PreviewModal({
                   </svg>
                 </button>
               </div>
-              {(loadingTags || tags.length > 0) && (
+              {(loadingTags || tags.length > 0 || detailsFailed) && (
                 <div className="preview-tags-section">
+                  {detailsFailed && !loadingTags ? (
+                    <div className="preview-details-missing">
+                      <span>
+                        {detailsStatus === 'offline'
+                          ? "Details didn't load (offline)."
+                          : detailsStatus
+                            ? `Details didn't load (${detailsStatus}).`
+                            : "Details didn't load."}
+                      </span>
+                      <button
+                        type="button"
+                        className="preview-details-retry"
+                        onClick={retryDetails}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                  <>
                   <h4 className="preview-section-label">Tags</h4>
                   {loadingTags && tags.length === 0 ? (
                     <div className="preview-tags-inline preview-tags-loading" aria-hidden="true">
@@ -879,6 +927,8 @@ export function PreviewModal({
                     </div>
                   ) : (
                     <PreviewTags key={wallpaper.id} tags={tags} onTagClick={onTagClick} />
+                  )}
+                  </>
                   )}
                 </div>
               )}

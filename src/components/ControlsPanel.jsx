@@ -23,6 +23,7 @@ export function ControlsPanel({
   isLoading,
   error,
   onClearError,
+  onRetry,
   viewMode,
   onViewModeChange,
   onOpenSettings,
@@ -372,14 +373,23 @@ export function ControlsPanel({
       {error && (
         <div className="error-banner" role="alert">
           <span>{error}</span>
-          <button
-            type="button"
-            className="error-dismiss"
-            onClick={onClearError}
-            aria-label="Dismiss error"
-          >
-            ×
-          </button>
+          <div className="error-banner-actions">
+            <button
+              type="button"
+              className="error-retry"
+              onClick={onRetry}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="error-dismiss"
+              onClick={onClearError}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
     </section>
