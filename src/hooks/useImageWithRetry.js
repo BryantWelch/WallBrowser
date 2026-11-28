@@ -12,6 +12,7 @@ export function useImageWithRetry(baseUrl, config = {}) {
     retryDelayBase = IMAGE_RETRY_CONFIG.retryDelayBase,
     watchdogTimeout = IMAGE_RETRY_CONFIG.watchdogTimeout,
     onHardFailure,
+    watchdogEnabled = true,
   } = config;
   // How many times a silent attempt may be replaced. Real errors use maxRetries.
   // Thumbnails keep the old budget. The preview passes 1 so a slow download
@@ -170,7 +171,9 @@ export function useImageWithRetry(baseUrl, config = {}) {
   // Last resort for a request that never loads and never errors. The wait is
   // long so a slow download is not abandoned, and a replacement happens once.
   useEffect(() => {
-    if (imageLoaded || imageError || !imageUrl) {
+    // A lazy thumbnail below the fold has not been requested yet. The timer
+    // stays off until the card is in view, or it would burn retries and fail.
+    if (imageLoaded || imageError || !imageUrl || !watchdogEnabled) {
       return;
     }
 
@@ -194,7 +197,7 @@ export function useImageWithRetry(baseUrl, config = {}) {
     }, watchdogTimeout);
 
     return () => clearTimeout(timeoutId);
-  }, [imageLoaded, imageError, imageUrl, watchdogTimeout, stallRetries, baseUrl, buildRetryUrl, useFallback, beginAttempt]);
+  }, [imageLoaded, imageError, imageUrl, watchdogEnabled, watchdogTimeout, stallRetries, baseUrl, buildRetryUrl, useFallback, beginAttempt]);
 
   return {
     imageUrl,

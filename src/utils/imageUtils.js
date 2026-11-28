@@ -109,6 +109,40 @@ export function prefetchImage(url, fallbackUrl) {
   img.src = url;
 }
 
+function httpFailure(status) {
+  const error = new Error(`HTTP ${status}`);
+  error.status = status;
+  return error;
+}
+
+// A 403 or 404 will not succeed on another try of the same address.
+async function fetchWallpaperBlob(downloadUrl, originalUrl, maxRetries, baseDelay) {
+  let lastError;
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    try {
+      const response = await fetch(downloadUrl);
+
+      if (!response.ok) {
+        throw httpFailure(response.status);
+      }
+
+      const blob = await response.blob();
+      const ext = originalUrl.split('.').pop() || 'jpg';
+      return { blob, ext };
+    } catch (err) {
+      lastError = err;
+      if (PERMANENT_FAILURE.has(err?.status)) throw err;
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * (attempt + 1);
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to download wallpaper');
+}
+
 export async function downloadWallpaperBlob(url) {
   if (!url) {
     throw new Error('Missing wallpaper URL');
@@ -117,34 +151,7 @@ export async function downloadWallpaperBlob(url) {
   const proxiedUrl = toProxiedDownloadUrl(url);
   const workerUrl = toWorkerFullUrl(url);
 
-  const maxRetries = 3;
-  const baseDelay = 400;
-
-  const attemptDownload = async (downloadUrl) => {
-    let lastError;
-    for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-      try {
-        const response = await fetch(downloadUrl);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const ext = url.split('.').pop() || 'jpg';
-
-        return { blob, ext };
-      } catch (err) {
-        lastError = err;
-        if (attempt < maxRetries - 1) {
-          const delay = baseDelay * (attempt + 1);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error('Failed to download wallpaper');
-  };
+  const attemptDownload = (downloadUrl) => fetchWallpaperBlob(downloadUrl, url, 3, 400);
 
   try {
     return await attemptDownload(proxiedUrl);
@@ -169,38 +176,13 @@ export async function createWallpapersZip(wallpapers) {
 
   const successfulIds = [];
   const failed = [];
-  const maxRetries = 2; // total attempts per phase
-  const baseDelay = 400;
 
-  const downloadWithRetries = async (downloadUrl, originalUrl) => {
+  const downloadWithRetries = (downloadUrl, originalUrl) => {
     if (!downloadUrl) {
       throw new Error('Missing download URL');
     }
-
-    let lastError;
-    for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-      try {
-        const response = await fetch(downloadUrl);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const ext = originalUrl.split('.').pop() || 'jpg';
-
-        return { blob, ext };
-      } catch (err) {
-        lastError = err;
-        if (attempt < maxRetries - 1) {
-          const delay = baseDelay * (attempt + 1);
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error('Failed to download wallpaper');
+    // Other failures still get one retry. A 403 or 404 moves on immediately.
+    return fetchWallpaperBlob(downloadUrl, originalUrl, 2, 400);
   };
 
   // Phase 1: fast path via proxied URL, with higher concurrency, limited retries.
@@ -269,6 +251,10 @@ export async function createWallpapersZip(wallpapers) {
       () => worker(),
     );
     await Promise.all(workers);
+  }
+
+  if (successfulIds.length === 0) {
+    return { content: null, successfulIds, failed };
   }
 
   const content = await zip.generateAsync({

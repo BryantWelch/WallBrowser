@@ -15,7 +15,7 @@ import { useDownloadedWallpapers } from './hooks/useDownloadedWallpapers';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSearchHistory } from './hooks/useSearchHistory';
 import { DEFAULT_FILTERS, STORAGE_KEYS, VIEW_MODES } from './constants';
-import { clearCache, buildSimilarFilters } from './utils';
+import { clearCache } from './utils';
 import { prefetchImage, toProxiedFullUrl, toWorkerFullUrl, downloadWallpaperBlob, createWallpapersZip } from './utils/imageUtils';
 import { ToastContainer } from './components/Toast';
 import { useToast } from './context/ToastContext';
@@ -95,6 +95,32 @@ function catalogStatTitle(stat, data) {
   return parts.join('. ');
 }
 
+function sameSearchFilters(left, right) {
+  if (!left || !right) return false;
+  const query = (filters) => {
+    const text = (filters.query || '').trim();
+    if (!filters.fileType) return text;
+    return text ? `type:${filters.fileType} ${text}` : `type:${filters.fileType}`;
+  };
+  const categories = (filters) => {
+    const selected = filters.categories || {};
+    return `${selected.general ? 1 : 0}${selected.anime ? 1 : 0}${selected.people ? 1 : 0}`;
+  };
+  const resolution = (filters) => {
+    if (!filters.resolution) return '';
+    return `${filters.exactResolution ? '=' : '>='}${filters.resolution}`;
+  };
+  const sort = left.sort || '';
+  return sort === (right.sort || '')
+    && (sort === 'toplist' ? (left.timeRange || '1M') === (right.timeRange || '1M') : true)
+    && query(left) === query(right)
+    && categories(left) === categories(right)
+    && (left.ratio || '') === (right.ratio || '')
+    && Boolean(left.includeNsfw) === Boolean(right.includeNsfw)
+    && (left.color || '').replace('#', '').toLowerCase() === (right.color || '').replace('#', '').toLowerCase()
+    && resolution(left) === resolution(right);
+}
+
 function App() {
   const { addToast } = useToast();
   // Always start with default filters - no persistence
@@ -162,6 +188,9 @@ function App() {
   // Show only favorites toggle
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [pageBeforeShowingFavorites, setPageBeforeShowingFavorites] = useState(1);
+  // Selection that existed before Favorites opened. Leaving the view restores
+  // it, so checks made inside Favorites do not replace the search selection.
+  const selectionBeforeFavoritesRef = useRef(null);
 
   // Show only downloaded wallpapers toggle
   const [showOnlyDownloaded, setShowOnlyDownloaded] = useState(false);
@@ -182,8 +211,6 @@ function App() {
   // Download status state
   const [downloadStatus, setDownloadStatus] = useState('idle'); // 'idle', 'downloading', 'zipping', 'success', 'error'
 
-  // Track when filters have changed but Fetch hasn't been pressed yet
-  const [hasPendingFilterChanges, setHasPendingFilterChanges] = useState(false);
 
   const getDownloadButtonLabel = useCallback((status, count) => {
     if (status === 'downloading') return '⏳ Downloading...';
@@ -207,17 +234,23 @@ function App() {
     return JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS);
   }, [filters]);
   
-  // Filters last sent to Wallhaven. Clear uses this so the Fetch button
-  // only lights up when the grid would actually change.
+  // Filters last sent to Wallhaven. Fetch pulses only when the form would
+  // change the grid, so undoing an edit turns the pulse off again.
+  const [appliedSearchFilters, setAppliedSearchFilters] = useState(filters);
   const appliedFiltersRef = useRef(filters);
+  const hasPendingFilterChanges = !sameSearchFilters(filters, appliedSearchFilters);
+  const rememberApplied = useCallback((nextFilters) => {
+    appliedFiltersRef.current = nextFilters;
+    setAppliedSearchFilters(nextFilters);
+  }, []);
   // Options for a search that still has to wait for the page to reset.
   const pendingFetchOptionsRef = useRef(null);
   const fetchApplied = useCallback((nextFilters, nextPage, options) => {
-    appliedFiltersRef.current = nextFilters;
+    rememberApplied(nextFilters);
     return fetchWallpapers(nextFilters, nextPage, options);
-  }, [fetchWallpapers]);
+  }, [fetchWallpapers, rememberApplied]);
   const startSearch = useCallback((nextFilters) => {
-    appliedFiltersRef.current = nextFilters;
+    rememberApplied(nextFilters);
     const fetchOptions = { renewSeed: true };
     if (page === 1) {
       return fetchWallpapers(nextFilters, 1, fetchOptions);
@@ -225,7 +258,7 @@ function App() {
     pendingFetchOptionsRef.current = fetchOptions;
     resetPage();
     return Promise.resolve();
-  }, [page, resetPage, fetchWallpapers]);
+  }, [page, resetPage, fetchWallpapers, rememberApplied]);
 
   // Handle filter changes (no auto-fetch, just update state)
   const handleFilterChange = useCallback((key, value) => {
@@ -233,7 +266,6 @@ function App() {
       ...prev,
       [key]: typeof value === 'function' ? value(prev[key]) : value
     }));
-    setHasPendingFilterChanges(true);
   }, []);
 
   // Handle multiple filter changes at once (no auto-fetch)
@@ -242,53 +274,58 @@ function App() {
       ...prev,
       ...updates
     }));
-    setHasPendingFilterChanges(true);
   }, []);
 
   // Clear the form back to defaults without searching. The current page
   // stays put until the user presses Fetch.
   const handleClearFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
-    const showingDefaults = JSON.stringify(appliedFiltersRef.current) === JSON.stringify(DEFAULT_FILTERS);
-    setHasPendingFilterChanges(!showingDefaults);
   }, []);
 
-  // Handle search for similar wallpapers
-  const handleSearchSimilar = useCallback(async (wallpaperId) => {
-    const newFilters = buildSimilarFilters(filters, wallpaperId);
-    setFilters(newFilters);
-    // Clear selections when starting a new search
+  // A click on a wallpaper starts a fresh search. The only search filter that
+  // carries over is the NSFW preference from Settings.
+  const freshSearch = useCallback((overrides) => ({
+    ...DEFAULT_FILTERS,
+    categories: { ...DEFAULT_FILTERS.categories },
+    includeNsfw: Boolean(filters.includeNsfw),
+    ...overrides,
+  }), [filters.includeNsfw]);
+
+  // Leave Favorites, Selected, and Downloads and show this search.
+  // The saved Favorites selection is dropped, because this is a new search.
+  const showSearchResults = useCallback((nextFilters, { recordHistory = false } = {}) => {
+    selectionBeforeFavoritesRef.current = null;
+    setShowOnlyFavorites(false);
+    setShowOnlySelected(false);
+    setShowOnlyDownloaded(false);
+    setPreviewWallpaper(null);
+    setFilters(nextFilters);
     setSelectedIds(new Set());
     setSelectedWallpapers(new Map());
-    await startSearch(newFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, setFilters, startSearch]);
+    if (recordHistory) addToHistory(nextFilters);
+    return startSearch(nextFilters);
+  }, [addToHistory, startSearch]);
+
+  // Handle search for similar wallpapers
+  const handleSearchSimilar = useCallback((wallpaperId) => {
+    return showSearchResults(
+      freshSearch({ query: `like:${wallpaperId}` }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
   
   // Fetch wallpapers (manual fetch via button)
-  const handleFetch = useCallback(async () => {
-    // Clear cache to ensure fresh results
+  const handleFetch = useCallback(() => {
     clearCache();
-    setHasPendingFilterChanges(false);
-    // Clear selections when user manually fetches (new search)
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    
-    addToHistory(filters);
-    await startSearch(filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, addToHistory, startSearch]);
+    return showSearchResults(filters, { recordHistory: true });
+  }, [filters, showSearchResults]);
   
   // Handle selecting a search from history
   const handleSelectHistory = useCallback((historyFilters) => {
     const { seed, ...formFilters } = historyFilters;
-    setFilters(formFilters);
-    // Clear selections
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    // Reset to page 1 and fetch
     clearCache();
-    startSearch(formFilters);
-  }, [startSearch]);
+    showSearchResults(formFilters);
+  }, [showSearchResults]);
   
   // Initial load - fetch with default filters
   const hasInitialFetchRef = useRef(false);
@@ -386,13 +423,13 @@ function App() {
         return nextMap;
       });
     } else {
-      // Normal toggle
-      let nextSizeAfterToggle = null;
+      // A click unchecks the last selected wallpaper. A shift-click only adds,
+      // so it must not leave this view while that wallpaper stays checked.
+      const removedLast = showOnlySelected && selectedIds.size === 1 && selectedIds.has(id);
       setSelectedIds(prev => {
         const next = new Set(prev);
         if (next.has(id)) {
           next.delete(id);
-          // Also remove from wallpapers map
           setSelectedWallpapers(prevMap => {
             const nextMap = new Map(prevMap);
             nextMap.delete(id);
@@ -400,7 +437,6 @@ function App() {
           });
         } else {
           next.add(id);
-          // Also add to wallpapers map
           const wallpaper = displayedWallpapers.find(w => w.id === id);
           if (wallpaper) {
             setSelectedWallpapers(prevMap => {
@@ -410,16 +446,12 @@ function App() {
             });
           }
         }
-        nextSizeAfterToggle = next.size;
         return next;
       });
-    }
-    
-    // If we're in show-selected view and the last item was just deselected, exit back to main view
-    if (showOnlySelected && selectedIds.size && selectedIds.size === 1) {
-      // After this toggle, there will be 0 selected
-      setShowOnlySelected(false);
-      goToPage(pageBeforeShowingSelected);
+      if (removedLast) {
+        setShowOnlySelected(false);
+        goToPage(pageBeforeShowingSelected);
+      }
     }
 
     // Update last clicked index
@@ -430,6 +462,9 @@ function App() {
   
   // Select all visible (current page only, or all visible in favorites/downloaded views)
   const selectAllVisible = useCallback(() => {
+    // Selected view has no Select all button. The shortcut must not reach
+    // through it and check the search page behind the list.
+    if (showOnlySelected) return;
     const sourceList = (showOnlyFavorites || showOnlyDownloaded) ? displayedWallpapers : wallpapers;
     const currentPageIds = sourceList.map(w => w.id);
     
@@ -444,7 +479,7 @@ function App() {
       sourceList.forEach(w => nextMap.set(w.id, w));
       return nextMap;
     });
-  }, [wallpapers, displayedWallpapers, showOnlyFavorites, showOnlyDownloaded]);
+  }, [wallpapers, displayedWallpapers, showOnlyFavorites, showOnlyDownloaded, showOnlySelected]);
 
   // Deselect all visible (current page only, or all if in show-selected mode)
   const deselectAllVisible = useCallback(() => {
@@ -614,7 +649,16 @@ function App() {
       addToast(`Preparing ZIP for ${selected.length} wallpapers...`, 'loading', 3000);
 
       const { content, successfulIds, failed } = await createWallpapersZip(selected);
-      
+      const successIds = Array.isArray(successfulIds) ? successfulIds : [];
+      const failedCount = Array.isArray(failed) ? failed.length : 0;
+
+      if (successIds.length === 0 || !content) {
+        setDownloadStatus('error');
+        addToast('Download failed. Please try again.', 'error');
+        setTimeout(() => setDownloadStatus('idle'), 2000);
+        return;
+      }
+
       const blobUrl = URL.createObjectURL(content);
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -623,32 +667,36 @@ function App() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
-      
-      // Mark only successfully downloaded wallpapers as downloaded (with full objects)
-      if (Array.isArray(successfulIds) && successfulIds.length > 0) {
-        const successSet = new Set(successfulIds);
-        const successfulWallpapers = selected.filter((w) => successSet.has(w.id));
-        if (successfulWallpapers.length > 0) {
-          markDownloaded(successfulWallpapers);
-        }
+
+      const successSet = new Set(successIds);
+      const successfulWallpapers = selected.filter((w) => successSet.has(w.id));
+      if (successfulWallpapers.length > 0) {
+        markDownloaded(successfulWallpapers);
       }
 
-      setDownloadStatus('success');
-      if (failed && failed.length > 0) {
-        const total = selected.length;
-        const successCount = successfulIds ? successfulIds.length : 0;
-        const failedCount = failed.length;
+      // Leave the files that never downloaded selected so they can be tried again.
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        successSet.forEach((id) => next.delete(id));
+        return next;
+      });
+      setSelectedWallpapers((prevMap) => {
+        const nextMap = new Map(prevMap);
+        successSet.forEach((id) => nextMap.delete(id));
+        return nextMap;
+      });
+
+      if (failedCount > 0) {
+        setDownloadStatus('idle');
         addToast(
-          `ZIP ready: downloaded ${successCount} of ${total} wallpapers (${failedCount} failed).`,
+          `ZIP ready: downloaded ${successIds.length} of ${selected.length} wallpapers (${failedCount} failed).`,
           'warning'
         );
       } else {
+        setDownloadStatus('success');
         addToast('ZIP download ready!', 'success');
+        setTimeout(() => setDownloadStatus('idle'), 2000);
       }
-
-      setSelectedIds(new Set());
-      setSelectedWallpapers(new Map());
-      setTimeout(() => setDownloadStatus('idle'), 2000);
     } catch (err) {
       console.error('Download failed:', err);
       setDownloadStatus('error');
@@ -667,103 +715,62 @@ function App() {
   }, []);
   
   // Handle color click in preview modal
-  const handleColorClick = useCallback(async (colorHex) => {
-    // Remove the # from the hex color
+  const handleColorClick = useCallback((colorHex) => {
     const colorValue = colorHex.replace('#', '');
-    
-    // Update filters with the new color
-    const updatedFilters = {
-      ...filters,
-      color: colorValue
-    };
-    setFilters(updatedFilters);
-    
-    // Close preview modal
-    setPreviewWallpaper(null);
-    
-    // Clear selections when starting a new search
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    
-    await startSearch(updatedFilters);
-  }, [filters, setFilters, startSearch]);
+    return showSearchResults(
+      freshSearch({ color: colorValue }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
 
   // Handle resolution click from thumbnails
-  const handleResolutionClick = useCallback(async (width, height) => {
-    if (!width || !height) return;
+  const handleResolutionClick = useCallback((width, height) => {
+    if (!width || !height) return undefined;
 
-    const resolutionValue = `${width}x${height}`;
-
-    const updatedFilters = {
-      ...filters,
-      resolution: resolutionValue,
-      exactResolution: true,
-      ratio: ''
-    };
-
-    setFilters(updatedFilters);
-
-    setPreviewWallpaper(null);
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-
-    await startSearch(updatedFilters);
-  }, [filters, setFilters, startSearch]);
+    return showSearchResults(
+      freshSearch({
+        resolution: `${width}x${height}`,
+        exactResolution: true,
+      }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
 
   // Handle uploader click in preview modal
-  const handleUploaderClick = useCallback(async (username) => {
+  const handleUploaderClick = useCallback((username) => {
     const name = String(username || '').replace(/^@/, '').trim();
-    if (!name || name === 'Anonymous') return;
+    if (!name || name === 'Anonymous') return undefined;
 
-    const updatedFilters = {
-      ...filters,
-      query: `@${name}`
-    };
-    setFilters(updatedFilters);
-    setPreviewWallpaper(null);
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    await startSearch(updatedFilters);
-  }, [filters, setFilters, startSearch]);
+    return showSearchResults(
+      freshSearch({ query: `@${name}` }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
 
   // Handle category click in preview modal
-  const handleCategoryClick = useCallback(async (category) => {
+  const handleCategoryClick = useCallback((category) => {
     const key = String(category || '').toLowerCase();
-    if (!['general', 'anime', 'people'].includes(key)) return;
+    if (!['general', 'anime', 'people'].includes(key)) return undefined;
 
-    const updatedFilters = {
-      ...filters,
-      categories: {
-        general: key === 'general',
-        anime: key === 'anime',
-        people: key === 'people',
-      }
-    };
-    setFilters(updatedFilters);
-    setPreviewWallpaper(null);
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    await startSearch(updatedFilters);
-  }, [filters, setFilters, startSearch]);
+    return showSearchResults(
+      freshSearch({
+        categories: {
+          general: key === 'general',
+          anime: key === 'anime',
+          people: key === 'people',
+        },
+      }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
 
   // Handle tag click in preview modal
-  const handleTagClick = useCallback(async (tagName) => {
-    // Update filters with the tag search
-    const updatedFilters = {
-      ...filters,
-      query: tagName
-    };
-    setFilters(updatedFilters);
-    
-    // Close preview modal
-    setPreviewWallpaper(null);
-    
-    // Clear selections when starting a new search
-    setSelectedIds(new Set());
-    setSelectedWallpapers(new Map());
-    
-    await startSearch(updatedFilters);
-  }, [filters, setFilters, startSearch]);
+  const handleTagClick = useCallback((tagName) => {
+    return showSearchResults(
+      freshSearch({ query: tagName }),
+      { recordHistory: true }
+    );
+  }, [freshSearch, showSearchResults]);
   
   // Ref to track if we need to reopen preview after page change
   const shouldReopenPreviewRef = useRef(null); // 'next' or 'prev' or null
@@ -928,33 +935,42 @@ function App() {
     });
   }, [page, pageBeforeShowingSelected, goToPage]);
   
+  const restoreSelectionAfterFavorites = useCallback(() => {
+    const saved = selectionBeforeFavoritesRef.current;
+    selectionBeforeFavoritesRef.current = null;
+    if (!saved) return;
+    setSelectedIds(new Set(saved.ids));
+    setSelectedWallpapers(new Map(saved.wallpapers));
+  }, []);
+
   // Toggle showing only favorites
   const toggleShowOnlyFavorites = useCallback(() => {
-    setShowOnlyFavorites(prev => {
-      if (!prev) {
-        // Entering favorites mode: save current page and exit selected mode
-        setPageBeforeShowingFavorites(page);
-        setShowOnlySelected(false);
-        setShowOnlyDownloaded(false);
-      } else {
-        // Exiting favorites mode: clear selections made in favorites view and return to saved page
-        setSelectedIds(new Set());
-        setSelectedWallpapers(new Map());
-        goToPage(pageBeforeShowingFavorites);
-      }
-      return !prev;
-    });
-  }, [page, pageBeforeShowingFavorites, goToPage]);
+    if (showOnlyFavorites) {
+      // Return to the selection from before this visit, then the saved page.
+      restoreSelectionAfterFavorites();
+      setShowOnlyFavorites(false);
+      goToPage(pageBeforeShowingFavorites);
+      return;
+    }
+    // Entering favorites mode: remember the search selection and the page.
+    selectionBeforeFavoritesRef.current = {
+      ids: new Set(selectedIds),
+      wallpapers: new Map(selectedWallpapers),
+    };
+    setPageBeforeShowingFavorites(page);
+    setShowOnlySelected(false);
+    setShowOnlyDownloaded(false);
+    setShowOnlyFavorites(true);
+  }, [showOnlyFavorites, page, pageBeforeShowingFavorites, goToPage, selectedIds, selectedWallpapers, restoreSelectionAfterFavorites]);
 
   // Auto-exit favorites view if no favorites remain
   useEffect(() => {
     if (showOnlyFavorites && favorites.length === 0) {
-      setSelectedIds(new Set());
-      setSelectedWallpapers(new Map());
+      restoreSelectionAfterFavorites();
       setShowOnlyFavorites(false);
       goToPage(pageBeforeShowingFavorites);
     }
-  }, [showOnlyFavorites, favorites, pageBeforeShowingFavorites, goToPage]);
+  }, [showOnlyFavorites, favorites, pageBeforeShowingFavorites, goToPage, restoreSelectionAfterFavorites]);
 
   // Toggle showing only downloaded wallpapers
   const toggleShowOnlyDownloaded = useCallback(() => {

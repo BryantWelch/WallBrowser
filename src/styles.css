@@ -790,13 +790,52 @@ body {
 }
 
 .primary-button-pending {
-  animation: fetchPulse 1.2s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+  animation: fetchPulse 1.45s ease-in-out infinite;
+}
+
+.primary-button-pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: fetchRing 1.45s ease-out infinite;
 }
 
 @keyframes fetchPulse {
-  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-  50% { box-shadow: 0 0 12px 2px rgba(37, 99, 235, 0.55); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+  0%, 100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgba(199, 210, 254, 0);
+  }
+  50% {
+    filter: brightness(1.08);
+    box-shadow:
+      0 0 0 2px rgba(224, 231, 255, 0.95),
+      0 0 16px 3px rgba(129, 140, 248, 0.85);
+  }
+}
+
+@keyframes fetchRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(199, 210, 254, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(199, 210, 254, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-button-pending,
+  .primary-button-pending::after {
+    animation: none;
+  }
+
+  .primary-button-pending {
+    filter: brightness(1.08);
+    box-shadow: 0 0 0 2px rgba(224, 231, 255, 0.95), 0 0 16px 3px rgba(129, 140, 248, 0.8);
+  }
 }
 
 .secondary-button {

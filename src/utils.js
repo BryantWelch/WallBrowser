@@ -185,13 +185,6 @@ export function generateCacheKey(filters) {
   return JSON.stringify(filters);
 }
 
-export function buildSimilarFilters(filters, wallpaperId) {
-  return {
-    ...filters,
-    query: `like:${wallpaperId}`,
-  };
-}
-
 export function getFavoriteToast(isFavorite) {
   if (!isFavorite) {
     return { message: 'Added to favorites', type: 'success' };

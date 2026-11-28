@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { formatFileSize, getFavoriteToast } from '../utils';
 import { getColorName, VIEW_MODES } from '../constants';
 import { usePortraitPhone } from './FilterMenu';
@@ -22,6 +22,25 @@ export const WallpaperCard = React.memo(function WallpaperCard({
   viewMode = VIEW_MODES.COMFORTABLE
 }) {
   const { addToast } = useToast();
+  const cardRef = useRef(null);
+  // Off-screen cards use loading="lazy", so the browser has not asked for the
+  // file yet. The stall timer starts once the card enters the view.
+  const [watchdogEnabled, setWatchdogEnabled] = useState(
+    () => typeof IntersectionObserver === 'undefined'
+  );
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || watchdogEnabled || typeof IntersectionObserver === 'undefined') return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setWatchdogEnabled(true);
+        observer.disconnect();
+      }
+    });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [watchdogEnabled]);
 
   const {
     imageUrl,
@@ -29,7 +48,10 @@ export const WallpaperCard = React.memo(function WallpaperCard({
     imageError,
     handleLoad,
     handleError,
-  } = useImageWithRetry(wallpaper.thumbUrl, IMAGE_RETRY_CONFIG);
+  } = useImageWithRetry(wallpaper.thumbUrl, {
+    ...IMAGE_RETRY_CONFIG,
+    watchdogEnabled,
+  });
 
   const portraitPhone = usePortraitPhone();
   const label = useMemo(() => `${wallpaper.width}×${wallpaper.height}`, [wallpaper.width, wallpaper.height]);
@@ -100,6 +122,7 @@ export const WallpaperCard = React.memo(function WallpaperCard({
 
   return (
     <article
+      ref={cardRef}
       className={`wallpaper-card wallpaper-card-${viewMode} ${
         isSelected ? 'wallpaper-card-selected' : ''
       }`}
